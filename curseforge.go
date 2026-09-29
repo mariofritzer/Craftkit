@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/url"
 	"sort"
 	"strconv"
@@ -114,7 +113,7 @@ func (c curseforge) Search(q SearchQuery) ([]Project, int, error) {
 
 func cfErr(err error) error {
 	if he, ok := err.(*HTTPError); ok && (he.Status == 401 || he.Status == 403) {
-		return fmt.Errorf("CurseForge lehnt den API-Key ab (HTTP %d) – bitte in den Einstellungen prüfen", he.Status)
+		return errf("CurseForge lehnt den API-Key ab (HTTP %d) – bitte in den Einstellungen prüfen", he.Status)
 	}
 	return err
 }
@@ -253,7 +252,7 @@ func (c curseforge) Versions(projectID, kind, mc string, loaders []string) ([]Mo
 				return nil, err
 			}
 			add(fs)
-			note = fmt.Sprintf("nicht ausdrücklich für %s markiert", mc)
+			note = sprintf("nicht ausdrücklich für %s markiert", mc)
 		}
 	} else {
 		for _, l := range loaders {

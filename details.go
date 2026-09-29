@@ -182,4 +182,4 @@ var errUnknownSource = errorString("unbekannte Quelle")
 
 type errorString string
 
-func (e errorString) Error() string { return string(e) }
+func (e errorString) Error() string { return L(string(e)) }

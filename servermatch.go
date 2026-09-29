@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -44,10 +43,10 @@ func adaptToServer(j *Job, req AdaptRequest) (*AdaptResult, error) {
 		}
 	}
 	if req.MCVersion == "" {
-		return nil, fmt.Errorf("keine Minecraft-Version angegeben")
+		return nil, errf("keine Minecraft-Version angegeben")
 	}
 	if req.Loader != "vanilla" && req.LoaderVersion == "" {
-		j.setStep("Suche passende "+loaderNames[req.Loader]+"-Version …", -1)
+		j.setStep(sprintf("Suche passende %s-Version …", loaderNames[req.Loader]), -1)
 		lvs, err := loaderVersionsFor(req.Loader, req.MCVersion)
 		if err != nil {
 			return nil, err
@@ -58,7 +57,7 @@ func adaptToServer(j *Job, req AdaptRequest) (*AdaptResult, error) {
 			}
 		}
 		if req.LoaderVersion == "" {
-			return nil, fmt.Errorf("%s gibt es nicht für Minecraft %s", loaderNames[req.Loader], req.MCVersion)
+			return nil, errf("%s gibt es nicht für Minecraft %s", loaderNames[req.Loader], req.MCVersion)
 		}
 	}
 	if strings.TrimSpace(req.Name) == "" {
@@ -67,9 +66,9 @@ func adaptToServer(j *Job, req AdaptRequest) (*AdaptResult, error) {
 			base = src.Name
 		}
 		if req.ServerName != "" {
-			req.Name = fmt.Sprintf("%s – %s", req.ServerName, req.MCVersion)
+			req.Name = sprintf("%s – %s", req.ServerName, req.MCVersion)
 		} else {
-			req.Name = fmt.Sprintf("%s – %s", base, req.MCVersion)
+			req.Name = sprintf("%s – %s", base, req.MCVersion)
 		}
 	}
 	mem := 0
@@ -137,7 +136,7 @@ func adaptToServer(j *Job, req AdaptRequest) (*AdaptResult, error) {
 		}
 		defer func() {
 			if res.Plan != nil && len(skipped) > 0 {
-				res.Plan.Warnings = append(res.Plan.Warnings, "Deaktiviert und daher nicht übernommen: "+strings.Join(skipped, ", ")+".")
+				res.Plan.Warnings = append(res.Plan.Warnings, sprintf("Deaktiviert und daher nicht übernommen: %s.", strings.Join(skipped, ", ")))
 			}
 		}()
 		for _, f := range foreignFiles(filepath.Join(src.Dir, "mods"), src.Items) {
@@ -154,7 +153,7 @@ func adaptToServer(j *Job, req AdaptRequest) (*AdaptResult, error) {
 	if len(reqs) == 0 && len(unresolved) == 0 && len(unknownFiles) == 0 {
 		return res, nil
 	}
-	j.setStep(fmt.Sprintf("Suche passende Versionen für Minecraft %s …", in.MCVersion), -1)
+	j.setStep(sprintf("Suche passende Versionen für Minecraft %s …", in.MCVersion), -1)
 	t, err := loadTarget("instance", in.ID)
 	if err != nil {
 		return nil, err
@@ -164,10 +163,10 @@ func adaptToServer(j *Job, req AdaptRequest) (*AdaptResult, error) {
 		plan = newResolver().resolve(t, dedupeRequests(reqs))
 	}
 	for _, u := range unresolved {
-		plan.Warnings = append(plan.Warnings, fmt.Sprintf("Server-Mod „%s“ wurde nicht automatisch gefunden – bitte von Hand suchen.", u))
+		plan.Warnings = append(plan.Warnings, sprintf("Server-Mod „%s“ wurde nicht automatisch gefunden – bitte von Hand suchen.", u))
 	}
 	for _, f := range unknownFiles {
-		plan.Warnings = append(plan.Warnings, fmt.Sprintf("„%s“ ist nicht über CraftKit installiert und wurde nicht übernommen (erst „Online erkennen“ nutzen).", f))
+		plan.Warnings = append(plan.Warnings, sprintf("„%s“ ist nicht über CraftKit installiert und wurde nicht übernommen (erst „Online erkennen“ nutzen).", f))
 	}
 	storePlan(plan)
 	res.Plan = plan

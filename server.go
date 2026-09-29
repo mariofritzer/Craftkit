@@ -94,7 +94,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	registerRoutes(mux)
-	srv := &http.Server{Handler: guard(mux), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: guard(withLang(mux)), ReadHeaderTimeout: 10 * time.Second}
 
 	if *afterUpdate {
 		// the open window reconnects by itself
@@ -269,7 +269,7 @@ func registerRoutes(mux *http.ServeMux) {
 		if err := readBody(r, &req); err != nil {
 			return nil, err
 		}
-		j := startJob("Instanz „"+req.Name+"“ anlegen", func(j *Job) (any, error) {
+		j := startJob(sprintf("Instanz „%s“ anlegen", req.Name), func(j *Job) (any, error) {
 			return createInstance(j, req)
 		})
 		return map[string]string{"job": j.ID}, nil
@@ -428,7 +428,7 @@ func registerRoutes(mux *http.ServeMux) {
 			}
 		}
 		if len(reqs) == 0 {
-			return nil, fmt.Errorf("nichts ausgewählt")
+			return nil, errf("nichts ausgewählt")
 		}
 		if req.UpdateAll {
 			// during "update all" every installed item is checked, not only explicit ones
@@ -440,7 +440,7 @@ func registerRoutes(mux *http.ServeMux) {
 		if t.Kind == "shader" {
 			if in, err := loadInstance(t.ID); err == nil {
 				if h := shaderHelp(in); !h.Supported && h.Message != "" {
-					plan.Warnings = append(plan.Warnings, h.Message+" Du findest den Knopf dafür im Reiter „Shader“.")
+					plan.Warnings = append(plan.Warnings, h.Message+" "+L("Du findest den Knopf dafür im Reiter „Shader“."))
 				}
 			}
 		}
@@ -457,9 +457,9 @@ func registerRoutes(mux *http.ServeMux) {
 		}
 		plan := takePlan(req.PlanID)
 		if plan == nil {
-			return nil, fmt.Errorf("Plan abgelaufen – bitte erneut prüfen")
+			return nil, errf("Plan abgelaufen – bitte erneut prüfen")
 		}
-		j := startJob("Installation in „"+plan.Target.Name+"“", func(j *Job) (any, error) {
+		j := startJob(sprintf("Installation in „%s“", plan.Target.Name), func(j *Job) (any, error) {
 			return applyPlan(j, plan)
 		})
 		return map[string]string{"job": j.ID}, nil
@@ -543,7 +543,7 @@ func registerRoutes(mux *http.ServeMux) {
 		}
 		name := safeFileName(req.File)
 		if name != req.File {
-			return nil, fmt.Errorf("ungültiger Dateiname")
+			return nil, errf("ungültiger Dateiname")
 		}
 		return map[string]bool{"ok": true}, os.Remove(filepath.Join(t.Dir, name))
 	}))
@@ -555,7 +555,7 @@ func registerRoutes(mux *http.ServeMux) {
 		}
 		req.Path = strings.TrimSpace(req.Path)
 		if req.Path == "" {
-			return nil, fmt.Errorf("kein Ordner gewählt")
+			return nil, errf("kein Ordner gewählt")
 		}
 		if req.Platform == "" {
 			req.Platform = "paper"
@@ -610,7 +610,7 @@ func registerRoutes(mux *http.ServeMux) {
 		}
 		readBody(r, &req)
 		if req.Title == "" {
-			req.Title = "Ordner wählen"
+			req.Title = L("Ordner wählen")
 		}
 		p, err := pickFolder(req.Title)
 		return map[string]string{"path": p}, err
@@ -680,13 +680,16 @@ func registerRoutes(mux *http.ServeMux) {
 			if req.AutoBackupWorlds != nil {
 				c.AutoBackupWorlds = req.AutoBackupWorlds
 			}
+			if req.Language == "" || len(req.Language) <= 10 {
+				c.Language = req.Language
+			}
 		})
 		return getConfig(), err
 	}))
 	mux.HandleFunc("/api/job", api(func(r *http.Request) (any, error) {
 		j := getJob(r.URL.Query().Get("id"))
 		if j == nil {
-			return nil, fmt.Errorf("Auftrag nicht gefunden")
+			return nil, errf("Auftrag nicht gefunden")
 		}
 		return j.snapshot(), nil
 	}))
@@ -705,7 +708,7 @@ func registerRoutes(mux *http.ServeMux) {
 				return map[string]any{"profile": p, "jars": jars, "missing": miss}, nil
 			}
 		}
-		return nil, fmt.Errorf("Profil nicht gefunden")
+		return nil, errf("Profil nicht gefunden")
 	}))
 	mux.HandleFunc("/api/adopt", api(func(r *http.Request) (any, error) {
 		var req struct {
@@ -714,7 +717,7 @@ func registerRoutes(mux *http.ServeMux) {
 		if err := readBody(r, &req); err != nil {
 			return nil, err
 		}
-		j := startJob("Profil übernehmen", func(j *Job) (any, error) { return adoptProfile(j, req.Key) })
+		j := startJob(L("Profil übernehmen"), func(j *Job) (any, error) { return adoptProfile(j, req.Key) })
 		return map[string]string{"job": j.ID}, nil
 	}))
 	mux.HandleFunc("/api/identify", api(func(r *http.Request) (any, error) {
@@ -729,7 +732,7 @@ func registerRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return nil, err
 		}
-		j := startJob("Dateien erkennen", func(j *Job) (any, error) { return identifyTarget(j, t) })
+		j := startJob(L("Dateien erkennen"), func(j *Job) (any, error) { return identifyTarget(j, t) })
 		return map[string]string{"job": j.ID}, nil
 	}))
 	mux.HandleFunc("/api/missing", api(func(r *http.Request) (any, error) {
@@ -771,7 +774,7 @@ func registerRoutes(mux *http.ServeMux) {
 
 	// ---------- mod sets ----------
 	mux.HandleFunc("/api/sets", api(func(r *http.Request) (any, error) {
-		return modSets, nil
+		return translatedSets(), nil
 	}))
 	mux.HandleFunc("/api/sets/plan", api(func(r *http.Request) (any, error) {
 		var req struct {
@@ -890,7 +893,7 @@ func registerRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return nil, err
 		}
-		j := startJob("Welt sichern", func(j *Job) (any, error) { return backupWorld(j, in, req.Folder, false) })
+		j := startJob(L("Welt sichern"), func(j *Job) (any, error) { return backupWorld(j, in, req.Folder, false) })
 		return map[string]string{"job": j.ID}, nil
 	}))
 	mux.HandleFunc("/api/worlds/restore", api(func(r *http.Request) (any, error) {
@@ -906,7 +909,7 @@ func registerRoutes(mux *http.ServeMux) {
 		if err != nil {
 			return nil, err
 		}
-		j := startJob("Welt wiederherstellen", func(j *Job) (any, error) { return nil, restoreWorld(j, in, req.Folder, req.File) })
+		j := startJob(L("Welt wiederherstellen"), func(j *Job) (any, error) { return nil, restoreWorld(j, in, req.Folder, req.File) })
 		return map[string]string{"job": j.ID}, nil
 	}))
 	mux.HandleFunc("/api/worlds/delete-backup", api(func(r *http.Request) (any, error) {
@@ -930,7 +933,7 @@ func registerRoutes(mux *http.ServeMux) {
 		return checkUpdate()
 	}))
 	mux.HandleFunc("/api/update/apply", api(func(r *http.Request) (any, error) {
-		j := startJob("CraftKit aktualisieren", applyUpdate)
+		j := startJob(L("CraftKit aktualisieren"), applyUpdate)
 		return map[string]string{"job": j.ID}, nil
 	}))
 
@@ -970,7 +973,7 @@ func registerRoutes(mux *http.ServeMux) {
 		if err := readBody(r, &req); err != nil {
 			return nil, err
 		}
-		j := startJob("Modpack installieren", func(j *Job) (any, error) {
+		j := startJob(L("Modpack installieren"), func(j *Job) (any, error) {
 			return installModpackFromSource(j, req.Source, req.ProjectID, req.VersionID, req.Name)
 		})
 		return map[string]string{"job": j.ID}, nil
@@ -995,7 +998,7 @@ func registerRoutes(mux *http.ServeMux) {
 			return
 		}
 		name := r.URL.Query().Get("name")
-		j := startJob("Modpack importieren", func(j *Job) (any, error) {
+		j := startJob(L("Modpack importieren"), func(j *Job) (any, error) {
 			defer os.Remove(tmp)
 			return importModpack(j, tmp, ModpackRef{}, name)
 		})
@@ -1017,7 +1020,7 @@ func registerRoutes(mux *http.ServeMux) {
 		if err := readBody(r, &req); err != nil {
 			return nil, err
 		}
-		j := startJob("An Server anpassen", func(j *Job) (any, error) { return adaptToServer(j, req) })
+		j := startJob(L("An Server anpassen"), func(j *Job) (any, error) { return adaptToServer(j, req) })
 		return map[string]string{"job": j.ID}, nil
 	}))
 	mux.HandleFunc("/api/server/link", api(func(r *http.Request) (any, error) {
@@ -1046,7 +1049,7 @@ func registerRoutes(mux *http.ServeMux) {
 				plan = newResolver().resolve(t, reqs)
 			}
 			for _, u := range unresolved {
-				plan.Warnings = append(plan.Warnings, fmt.Sprintf("Server-Mod „%s“ wurde nicht automatisch gefunden – bitte von Hand suchen.", u))
+				plan.Warnings = append(plan.Warnings, sprintf("Server-Mod „%s“ wurde nicht automatisch gefunden – bitte von Hand suchen.", u))
 			}
 			storePlan(plan)
 			out["plan"] = plan

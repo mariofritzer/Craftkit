@@ -14,41 +14,41 @@
     <img class="logo" src="icon.png" alt="" width="34" height="34">
     <div>
       <div class="brand-name">CraftKit</div>
-      <div class="brand-sub">Versionen, Mods &amp; Plugins</div>
+      <div class="brand-sub" data-i18n="Versionen, Mods &amp; Plugins">Versionen, Mods &amp; Plugins</div>
     </div>
   </div>
   <div class="top-status" id="topStatus"></div>
-  <button class="btn btn-play" id="btnLauncher" title="Öffnet den offiziellen Minecraft Launcher">
+  <button class="btn btn-play" id="btnLauncher" title="Öffnet den offiziellen Minecraft Launcher" data-i18n-title="Öffnet den offiziellen Minecraft Launcher">
     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
-    Minecraft Launcher öffnen
+    <span data-i18n="Minecraft Launcher öffnen">Minecraft Launcher öffnen</span>
   </button>
 </header>
 
 <div class="layout">
   <nav class="sidebar">
     <div class="side-section">
-      <div class="side-head"><span>Instanzen</span><button class="icon-btn" id="btnNewInstance" title="Neue Instanz">+</button></div>
+      <div class="side-head"><span data-i18n="Instanzen">Instanzen</span><button class="icon-btn" id="btnNewInstance" title="Neue Instanz" data-i18n-title="Neue Instanz">+</button></div>
       <div id="instanceList" class="side-list"></div>
     </div>
     <div class="side-section">
-      <div class="side-head"><span>Plugin-Ordner</span><button class="icon-btn" id="btnNewPluginFolder" title="Plugin-Ordner hinzufügen">+</button></div>
+      <div class="side-head"><span data-i18n="Plugin-Ordner">Plugin-Ordner</span><button class="icon-btn" id="btnNewPluginFolder" title="Plugin-Ordner hinzufügen" data-i18n-title="Plugin-Ordner hinzufügen">+</button></div>
       <div id="pluginList" class="side-list"></div>
     </div>
     <div class="side-section" id="foundSection">
-      <div class="side-head"><span>Im Launcher gefunden</span></div>
+      <div class="side-head"><span data-i18n="Im Launcher gefunden">Im Launcher gefunden</span></div>
       <div id="foundList" class="side-list"></div>
     </div>
     <div class="side-foot">
-      <button class="side-item" id="btnSettings"><span class="side-ico">⚙</span> Einstellungen</button>
+      <button class="side-item" id="btnSettings"><span class="side-ico">⚙</span> <span data-i18n="Einstellungen">Einstellungen</span></button>
     </div>
   </nav>
   <main id="main" class="main"></main>
 </div>
 
 <div id="cartBar" class="cart-bar hidden">
-  <div class="cart-info"><strong id="cartCount">0</strong> <span id="cartLabel">ausgewählt</span> <span class="cart-names" id="cartNames"></span></div>
-  <button class="btn btn-ghost" id="btnCartClear">Leeren</button>
-  <button class="btn btn-primary" id="btnCartPlan">Abhängigkeiten prüfen &amp; installieren</button>
+  <div class="cart-info"><strong id="cartCount">0</strong> <span id="cartLabel">ausgewählt:</span> <span class="cart-names" id="cartNames"></span></div>
+  <button class="btn btn-ghost" id="btnCartClear" data-i18n="Leeren">Leeren</button>
+  <button class="btn btn-primary" id="btnCartPlan" data-i18n="Abhängigkeiten prüfen & installieren">Abhängigkeiten prüfen &amp; installieren</button>
 </div>
 
 <div id="modalRoot"></div>

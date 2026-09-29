@@ -5,7 +5,6 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -25,7 +24,7 @@ type nbtList struct {
 
 func nbtReadPayload(r *bytes.Reader, t byte, depth int) (any, error) {
 	if depth > 64 {
-		return nil, errors.New("NBT zu tief verschachtelt")
+		return nil, errNew("NBT zu tief verschachtelt")
 	}
 	var err error
 	switch t {
@@ -56,7 +55,7 @@ func nbtReadPayload(r *bytes.Reader, t byte, depth int) (any, error) {
 	case 7:
 		var n int32
 		if err = binary.Read(r, binary.BigEndian, &n); err != nil || n < 0 || int(n) > r.Len() {
-			return nil, errors.New("ungültiges Byte-Array")
+			return nil, errNew("ungültiges Byte-Array")
 		}
 		b := make([]byte, n)
 		_, err = io.ReadFull(r, b)
@@ -76,7 +75,7 @@ func nbtReadPayload(r *bytes.Reader, t byte, depth int) (any, error) {
 			return nil, err
 		}
 		if err = binary.Read(r, binary.BigEndian, &n); err != nil || n < 0 || int(n) > r.Len()+1 {
-			return nil, errors.New("ungültige Liste")
+			return nil, errNew("ungültige Liste")
 		}
 		l := nbtList{ElemType: et}
 		for i := 0; i < int(n); i++ {
@@ -114,7 +113,7 @@ func nbtReadPayload(r *bytes.Reader, t byte, depth int) (any, error) {
 	case 11:
 		var n int32
 		if err = binary.Read(r, binary.BigEndian, &n); err != nil || n < 0 || int(n)*4 > r.Len() {
-			return nil, errors.New("ungültiges Int-Array")
+			return nil, errNew("ungültiges Int-Array")
 		}
 		v := make([]int32, n)
 		err = binary.Read(r, binary.BigEndian, v)
@@ -122,13 +121,13 @@ func nbtReadPayload(r *bytes.Reader, t byte, depth int) (any, error) {
 	case 12:
 		var n int32
 		if err = binary.Read(r, binary.BigEndian, &n); err != nil || n < 0 || int(n)*8 > r.Len() {
-			return nil, errors.New("ungültiges Long-Array")
+			return nil, errNew("ungültiges Long-Array")
 		}
 		v := make([]int64, n)
 		err = binary.Read(r, binary.BigEndian, v)
 		return v, err
 	}
-	return nil, errors.New("unbekannter NBT-Typ")
+	return nil, errNew("unbekannter NBT-Typ")
 }
 
 func nbtWritePayload(w *bytes.Buffer, t byte, v any) {
@@ -185,11 +184,11 @@ func addServerToList(gameDir, name, address string) (bool, error) {
 		binary.Read(r, binary.BigEndian, &n)
 		r.Seek(int64(n), io.SeekCurrent)
 		if t != 10 {
-			return false, errors.New("servers.dat hat ein unbekanntes Format")
+			return false, errNew("servers.dat hat ein unbekanntes Format")
 		}
 		v, err := nbtReadPayload(r, 10, 0)
 		if err != nil {
-			return false, errors.New("servers.dat ist beschädigt – bitte im Spiel öffnen oder löschen")
+			return false, errNew("servers.dat ist beschädigt – bitte im Spiel öffnen oder löschen")
 		}
 		root = v.([]*nbtTag)
 	}

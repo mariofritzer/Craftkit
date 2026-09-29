@@ -2,7 +2,6 @@ package main
 
 import (
 	"archive/zip"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -80,7 +79,7 @@ func ensureJava(j *Job) (string, error) {
 		return p, nil
 	}
 	if runtime.GOOS != "windows" {
-		return "", fmt.Errorf("kein Java gefunden – bitte Java 21 installieren oder in den Einstellungen angeben")
+		return "", errf("kein Java gefunden – bitte Java 21 installieren oder in den Einstellungen angeben")
 	}
 	j.logf("Kein Java gefunden – lade eine portable Java-21-Laufzeit (Eclipse Temurin) herunter …")
 	arch := "x64"
@@ -91,24 +90,24 @@ func ensureJava(j *Job) (string, error) {
 	zipPath := filepath.Join(dataDir(), "java-download.zip")
 	err := download(u, zipPath, nil, func(done, total int64) {
 		if total > 0 {
-			j.setStep(fmt.Sprintf("Java wird geladen … %d / %d MB", done>>20, total>>20), float64(done)/float64(total)*0.5)
+			j.setStep(sprintf("Java wird geladen … %d / %d MB", done>>20, total>>20), float64(done)/float64(total)*0.5)
 		}
 	})
 	if err != nil {
-		return "", fmt.Errorf("Java-Download fehlgeschlagen: %w", err)
+		return "", errf("Java-Download fehlgeschlagen: %w", err)
 	}
 	defer os.Remove(zipPath)
 	dest := filepath.Join(dataDir(), "java")
 	os.RemoveAll(dest)
 	j.setStep("Java wird entpackt …", -1)
 	if err := unzip(zipPath, dest); err != nil {
-		return "", fmt.Errorf("Java entpacken fehlgeschlagen: %w", err)
+		return "", errf("Java entpacken fehlgeschlagen: %w", err)
 	}
 	if m, _ := filepath.Glob(filepath.Join(dest, "*", "bin", javaExeName())); len(m) > 0 {
 		j.logf("Java installiert: %s", m[0])
 		return m[0], nil
 	}
-	return "", fmt.Errorf("Java wurde geladen, aber java.exe nicht gefunden")
+	return "", errf("Java wurde geladen, aber java.exe nicht gefunden")
 }
 
 func unzip(src, dest string) error {
@@ -121,7 +120,7 @@ func unzip(src, dest string) error {
 	for _, f := range r.File {
 		p := filepath.Join(destAbs, f.Name)
 		if !strings.HasPrefix(p, destAbs+string(os.PathSeparator)) {
-			return fmt.Errorf("ungültiger Pfad im Archiv: %s", f.Name)
+			return errf("ungültiger Pfad im Archiv: %s", f.Name)
 		}
 		if f.FileInfo().IsDir() {
 			os.MkdirAll(p, 0o755)

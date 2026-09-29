@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -80,7 +79,7 @@ func applyUpdate(j *Job) (any, error) {
 		return nil, err
 	}
 	if !info.Available {
-		return nil, errors.New("keine neuere Version verfügbar")
+		return nil, errNew("keine neuere Version verfügbar")
 	}
 	self, err := os.Executable()
 	if err != nil {
@@ -94,21 +93,21 @@ func applyUpdate(j *Job) (any, error) {
 	if info.SHAURL != "" {
 		b, err := getBytes(info.SHAURL, map[string]string{"Accept": "*/*"}, 0)
 		if err != nil {
-			return nil, fmt.Errorf("Prüfsumme nicht abrufbar: %w", err)
+			return nil, errf("Prüfsumme nicht abrufbar: %w", err)
 		}
 		fields := strings.Fields(string(b))
 		if len(fields) == 0 || len(fields[0]) != 64 {
-			return nil, errors.New("Prüfsummen-Datei ist ungültig")
+			return nil, errNew("Prüfsummen-Datei ist ungültig")
 		}
 		want = &Hash{"sha256", fields[0]}
 	}
 	if err := download(info.ExeURL, newPath, nil, func(done, total int64) {
 		if total > 0 {
-			j.setStep(fmt.Sprintf("Lade Update … %d / %d MB", done>>20, total>>20), float64(done)/float64(total)*0.9)
+			j.setStep(sprintf("Lade Update … %d / %d MB", done>>20, total>>20), float64(done)/float64(total)*0.9)
 		}
 	}); err != nil {
 		if os.IsPermission(err) || strings.Contains(err.Error(), "denied") {
-			return nil, fmt.Errorf("kein Schreibrecht in %s – lade die neue Version bitte von %s", dir, info.URL)
+			return nil, errf("kein Schreibrecht in %s – lade die neue Version bitte von %s", dir, info.URL)
 		}
 		return nil, err
 	}
@@ -116,7 +115,7 @@ func applyUpdate(j *Job) (any, error) {
 		got, err := sha256File(newPath)
 		if err != nil || !strings.EqualFold(got, want.Value) {
 			os.Remove(newPath)
-			return nil, errors.New("Update-Datei ist beschädigt (Prüfsumme stimmt nicht) – bitte später erneut versuchen")
+			return nil, errNew("Update-Datei ist beschädigt (Prüfsumme stimmt nicht) – bitte später erneut versuchen")
 		}
 		j.logf("Prüfsumme ok.")
 	}
@@ -124,17 +123,17 @@ func applyUpdate(j *Job) (any, error) {
 	os.Remove(old)
 	if err := os.Rename(self, old); err != nil {
 		os.Remove(newPath)
-		return nil, fmt.Errorf("CraftKit konnte nicht ersetzt werden: %w", err)
+		return nil, errf("CraftKit konnte nicht ersetzt werden: %w", err)
 	}
 	if err := os.Rename(newPath, self); err != nil {
 		os.Rename(old, self) // roll back
-		return nil, fmt.Errorf("CraftKit konnte nicht ersetzt werden: %w", err)
+		return nil, errf("CraftKit konnte nicht ersetzt werden: %w", err)
 	}
 	j.logf("Update installiert – starte neu …")
 	cmd := exec.Command(self, "-after-update")
 	cmd.Dir = dir
 	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("Neustart fehlgeschlagen – bitte CraftKit neu öffnen: %w", err)
+		return nil, errf("Neustart fehlgeschlagen – bitte CraftKit neu öffnen: %w", err)
 	}
 	go func() {
 		time.Sleep(1500 * time.Millisecond) // let the UI receive the result first

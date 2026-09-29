@@ -160,7 +160,7 @@ func getJSON(url string, headers map[string]string, ttl time.Duration, out any) 
 		return err
 	}
 	if err := json.Unmarshal(b, out); err != nil {
-		return fmt.Errorf("Antwort von %s nicht lesbar: %w", url, err)
+		return errf("Antwort von %s nicht lesbar: %w", url, err)
 	}
 	return nil
 }
@@ -265,7 +265,7 @@ func downloadOnce(url, dest string, want *Hash, progress func(done, total int64)
 		got := hex.EncodeToString(h.Sum(nil))
 		if !strings.EqualFold(got, want.Value) {
 			os.Remove(tmp)
-			return fmt.Errorf("Prüfsumme stimmt nicht für %s (Datei beschädigt?)", filepath.Base(dest))
+			return errf("Prüfsumme stimmt nicht für %s (Datei beschädigt?)", filepath.Base(dest))
 		}
 	}
 	os.Remove(dest)

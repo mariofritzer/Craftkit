@@ -168,9 +168,9 @@ func discoverProfiles() []FoundProfile {
 			if fp.Name == "" {
 				switch p.Type {
 				case "latest-release":
-					fp.Name = "Neueste Version"
+					fp.Name = L("Neueste Version")
 				case "latest-snapshot":
-					fp.Name = "Neuester Snapshot"
+					fp.Name = L("Neuester Snapshot")
 				default:
 					fp.Name = key
 				}
@@ -206,7 +206,7 @@ func adoptProfile(j *Job, key string) (*Instance, error) {
 		}
 	}
 	if fp == nil {
-		return nil, fmt.Errorf("Profil nicht gefunden")
+		return nil, errf("Profil nicht gefunden")
 	}
 	if fp.InstanceID != "" {
 		if in, err := loadInstance(fp.InstanceID); err == nil {
@@ -301,7 +301,7 @@ func identifyTarget(j *Job, t *Target) (*IdentifyResult, error) {
 	if len(cands) == 0 {
 		return res, nil
 	}
-	j.setStep(fmt.Sprintf("Erkenne %d Datei(en) online …", len(cands)), -1)
+	j.setStep(sprintf("Erkenne %d Datei(en) online …", len(cands)), -1)
 
 	found := map[string]*InstalledItem{} // by file
 	// 1) Modrinth by sha1

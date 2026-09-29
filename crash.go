@@ -4,7 +4,6 @@ package main
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -187,13 +186,13 @@ func analyzeCrash(in *Instance) *CrashReport {
 				target = m[4]
 			}
 			if strings.EqualFold(target, "minecraft") || strings.EqualFold(target, "fabricloader") || strings.EqualFold(target, "java") {
-				what := map[string]string{"minecraft": "Minecraft-Version", "fabricloader": "Fabric-Loader-Version", "java": "Java-Version"}[strings.ToLower(target)]
-				add(CrashFinding{Kind: "incompatible", Title: fmt.Sprintf("„%s“ passt nicht zur %s", m[1], what),
-					Detail: fmt.Sprintf("Benötigt %s, vorhanden ist %s. Aktualisiere die Mod oder wähle eine passende Version.", m[3], m[6]),
+				what := map[string]string{"minecraft": L("Minecraft-Version"), "fabricloader": L("Fabric-Loader-Version"), "java": L("Java-Version")}[strings.ToLower(target)]
+				add(CrashFinding{Kind: "incompatible", Title: sprintf("„%s“ passt nicht zur %s", m[1], what),
+					Detail: sprintf("Benötigt %s, vorhanden ist %s. Aktualisiere die Mod oder wähle eine passende Version.", m[3], m[6]),
 					Mods:   []CrashMod{modFor(m[2], m[1])}})
 			} else {
-				add(CrashFinding{Kind: "incompatible", Title: fmt.Sprintf("„%s“ braucht eine andere Version von „%s“", m[1], m[4]),
-					Detail: fmt.Sprintf("Benötigt %s, vorhanden ist %s.", m[3], m[6]),
+				add(CrashFinding{Kind: "incompatible", Title: sprintf("„%s“ braucht eine andere Version von „%s“", m[1], m[4]),
+					Detail: sprintf("Benötigt %s, vorhanden ist %s.", m[3], m[6]),
 					Mods:   []CrashMod{modFor(target, m[4]), modFor(m[2], m[1])}})
 			}
 			continue
@@ -203,16 +202,16 @@ func analyzeCrash(in *Instance) *CrashReport {
 			if other == "" {
 				other = m[3]
 			}
-			add(CrashFinding{Kind: "incompatible", Title: fmt.Sprintf("„%s“ verträgt sich nicht mit „%s“", m[1], m[3]),
-				Detail: "Deaktiviere eine der beiden Mods.", Mods: []CrashMod{modFor(m[2], m[1]), modFor(other, m[3])}})
+			add(CrashFinding{Kind: "incompatible", Title: sprintf("„%s“ verträgt sich nicht mit „%s“", m[1], m[3]),
+				Detail: L("Deaktiviere eine der beiden Mods."), Mods: []CrashMod{modFor(m[2], m[1]), modFor(other, m[3])}})
 			continue
 		}
 		if m := reForgeMissing.FindStringSubmatch(t); m != nil {
 			if m[4] == "[MISSING]" || m[4] == "" {
 				addMissing(m[1], modFor(m[2], m[2]).Name)
 			} else {
-				add(CrashFinding{Kind: "incompatible", Title: fmt.Sprintf("„%s“ braucht eine andere Version von „%s“", modFor(m[2], m[2]).Name, m[1]),
-					Detail: fmt.Sprintf("Erwartet %s, vorhanden ist %s.", m[3], m[4]), Mods: []CrashMod{modFor(m[1], m[1]), modFor(m[2], m[2])}})
+				add(CrashFinding{Kind: "incompatible", Title: sprintf("„%s“ braucht eine andere Version von „%s“", modFor(m[2], m[2]).Name, m[1]),
+					Detail: sprintf("Erwartet %s, vorhanden ist %s.", m[3], m[4]), Mods: []CrashMod{modFor(m[1], m[1]), modFor(m[2], m[2])}})
 			}
 			continue
 		}
@@ -234,17 +233,17 @@ func analyzeCrash(in *Instance) *CrashReport {
 		low := strings.ToLower(t)
 		switch {
 		case strings.Contains(low, "java.lang.outofmemoryerror") || strings.Contains(low, "java heap space"):
-			add(CrashFinding{Kind: "memory", Title: "Zu wenig Arbeitsspeicher",
-				Detail: "Minecraft hatte nicht genug RAM. Erhöhe den Arbeitsspeicher der Instanz (Bearbeiten → RAM), z. B. auf 6–8 GB bei vielen Mods."})
+			add(CrashFinding{Kind: "memory", Title: L("Zu wenig Arbeitsspeicher"),
+				Detail: L("Minecraft hatte nicht genug RAM. Erhöhe den Arbeitsspeicher der Instanz (Bearbeiten → RAM), z. B. auf 6–8 GB bei vielen Mods.")})
 		case strings.Contains(low, "unsupportedclassversionerror") || strings.Contains(low, "has been compiled by a more recent version of the java runtime"):
-			add(CrashFinding{Kind: "java", Title: "Falsche Java-Version",
-				Detail: "Eine Mod braucht eine neuere Java-Version als die, mit der Minecraft gestartet wurde. Meist hilft ein Update der Mod-Loader-Version oder das Entfernen einer Mod, die für eine neuere Minecraft-Version gebaut ist."})
+			add(CrashFinding{Kind: "java", Title: L("Falsche Java-Version"),
+				Detail: L("Eine Mod braucht eine neuere Java-Version als die, mit der Minecraft gestartet wurde. Meist hilft ein Update der Mod-Loader-Version oder das Entfernen einer Mod, die für eine neuere Minecraft-Version gebaut ist.")})
 		case strings.Contains(low, "mixin") && (strings.Contains(low, "failed") || strings.Contains(low, "error")):
 			if mm := reMixinMod.FindStringSubmatch(t); mm != nil {
 				id := firstNonEmpty(mm[1], mm[2], mm[3])
 				if cm := modFor(id, id); cm.File != "" {
-					add(CrashFinding{Kind: "mixin", Title: fmt.Sprintf("„%s“ konnte nicht geladen werden", cm.Name),
-						Detail: "Die Mod greift in Minecraft ein und ist mit dieser Version oder einer anderen Mod nicht verträglich. Aktualisiere oder deaktiviere sie.",
+					add(CrashFinding{Kind: "mixin", Title: sprintf("„%s“ konnte nicht geladen werden", cm.Name),
+						Detail: L("Die Mod greift in Minecraft ein und ist mit dieser Version oder einer anderen Mod nicht verträglich. Aktualisiere oder deaktiviere sie."),
 						Mods:   []CrashMod{cm}})
 				}
 			}
@@ -271,12 +270,12 @@ func analyzeCrash(in *Instance) *CrashReport {
 		for _, m := range ms {
 			names = append(names, firstNonEmpty(m.Name, m.ModID))
 		}
-		rep.Findings = append([]CrashFinding{{Kind: "missing", Title: "Fehlende Abhängigkeiten: " + strings.Join(names, ", "),
-			Detail: "Diese Mods werden von anderen Mods benötigt, sind aber nicht installiert.", Missing: ms}}, rep.Findings...)
+		rep.Findings = append([]CrashFinding{{Kind: "missing", Title: L("Fehlende Abhängigkeiten: ") + strings.Join(names, ", "),
+			Detail: L("Diese Mods werden von anderen Mods benötigt, sind aber nicht installiert."), Missing: ms}}, rep.Findings...)
 	}
 	if len(suspects) > 0 {
-		add(CrashFinding{Kind: "suspect", Title: "Der Absturzbericht verdächtigt: " + joinModNames(suspects),
-			Detail: "Versuche zuerst, diese Mod zu aktualisieren. Hilft das nicht, deaktiviere sie und starte erneut.", Mods: suspects})
+		add(CrashFinding{Kind: "suspect", Title: L("Der Absturzbericht verdächtigt: ") + joinModNames(suspects),
+			Detail: L("Versuche zuerst, diese Mod zu aktualisieren. Hilft das nicht, deaktiviere sie und starte erneut."), Mods: suspects})
 	}
 	if len(scores) > 0 && len(suspects) == 0 {
 		type sc struct {
@@ -301,12 +300,12 @@ func analyzeCrash(in *Instance) *CrashReport {
 				}
 			}
 		}
-		add(CrashFinding{Kind: "suspect", Title: "Im Fehlerverlauf tauchen auf: " + joinModNames(mods),
-			Detail: "Diese Mods waren am Absturz beteiligt. Das heißt nicht sicher, dass sie schuld sind – aktualisieren oder testweise deaktivieren hilft beim Eingrenzen.", Mods: mods})
+		add(CrashFinding{Kind: "suspect", Title: L("Im Fehlerverlauf tauchen auf: ") + joinModNames(mods),
+			Detail: L("Diese Mods waren am Absturz beteiligt. Das heißt nicht sicher, dass sie schuld sind – aktualisieren oder testweise deaktivieren hilft beim Eingrenzen."), Mods: mods})
 	}
 	if len(rep.Findings) == 0 {
-		add(CrashFinding{Kind: "info", Title: "Keine eindeutige Ursache erkannt",
-			Detail: "Tipp: Deaktiviere zuletzt hinzugefügte Mods oder nutze „Rückgängig“, um den Stand vor der letzten Änderung wiederherzustellen."})
+		add(CrashFinding{Kind: "info", Title: L("Keine eindeutige Ursache erkannt"),
+			Detail: L("Tipp: Deaktiviere zuletzt hinzugefügte Mods oder nutze „Rückgängig“, um den Stand vor der letzten Änderung wiederherzustellen.")})
 	}
 	rep.Excerpt = excerpt(lines)
 	return rep

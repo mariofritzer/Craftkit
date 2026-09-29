@@ -5,7 +5,6 @@ package main
 import (
 	"archive/zip"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -46,15 +45,15 @@ type ManualFile struct {
 func safeJoin(base, rel string) (string, error) {
 	rel = strings.ReplaceAll(rel, "\\", "/")
 	if rel == "" || strings.HasPrefix(rel, "/") || strings.Contains(rel, ":") {
-		return "", fmt.Errorf("ungültiger Pfad %q", rel)
+		return "", errf("ungültiger Pfad %q", rel)
 	}
 	clean := path.Clean(rel)
 	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
-		return "", fmt.Errorf("ungültiger Pfad %q", rel)
+		return "", errf("ungültiger Pfad %q", rel)
 	}
 	for _, part := range strings.Split(clean, "/") {
 		if part == ".." {
-			return "", fmt.Errorf("ungültiger Pfad %q", rel)
+			return "", errf("ungültiger Pfad %q", rel)
 		}
 	}
 	return filepath.Join(base, filepath.FromSlash(clean)), nil
@@ -150,7 +149,7 @@ func forgeFullVersion(mc, short string) string {
 func importModpack(j *Job, file string, ref ModpackRef, nameOverride string) (*ModpackResult, error) {
 	zr, err := zip.OpenReader(file)
 	if err != nil {
-		return nil, fmt.Errorf("Datei ist kein gültiges Modpack (kein Zip): %w", err)
+		return nil, errf("Datei ist kein gültiges Modpack (kein Zip): %w", err)
 	}
 	defer zr.Close()
 	if b := zipFile(&zr.Reader, "modrinth.index.json"); b != nil {
@@ -159,20 +158,20 @@ func importModpack(j *Job, file string, ref ModpackRef, nameOverride string) (*M
 	if b := zipFile(&zr.Reader, "manifest.json"); b != nil {
 		return importCurseForgePack(j, &zr.Reader, b, ref, nameOverride)
 	}
-	return nil, errors.New("unbekanntes Modpack-Format – unterstützt werden Modrinth (.mrpack) und CurseForge (.zip mit manifest.json)")
+	return nil, errNew("unbekanntes Modpack-Format – unterstützt werden Modrinth (.mrpack) und CurseForge (.zip mit manifest.json)")
 }
 
 func importMrpack(j *Job, zr *zip.Reader, raw []byte, ref ModpackRef, nameOverride string) (*ModpackResult, error) {
 	var idx mrpackIndex
 	if err := json.Unmarshal(raw, &idx); err != nil {
-		return nil, fmt.Errorf("modrinth.index.json nicht lesbar: %w", err)
+		return nil, errf("modrinth.index.json nicht lesbar: %w", err)
 	}
 	if idx.Game != "" && idx.Game != "minecraft" {
-		return nil, fmt.Errorf("Modpack ist nicht für Minecraft")
+		return nil, errf("Modpack ist nicht für Minecraft")
 	}
 	mc := idx.Dependencies["minecraft"]
 	if mc == "" {
-		return nil, errors.New("Modpack nennt keine Minecraft-Version")
+		return nil, errNew("Modpack nennt keine Minecraft-Version")
 	}
 	loader, lv := "vanilla", ""
 	switch {
@@ -231,7 +230,7 @@ func importMrpack(j *Job, zr *zip.Reader, raw []byte, ref ModpackRef, nameOverri
 	done := 0
 	runParallel(len(tasks), 6, func(i int) {
 		t := tasks[i]
-		var lastErr error = errors.New("keine Download-Adresse")
+		var lastErr error = errNew("keine Download-Adresse")
 		for _, u := range t.urls {
 			if lastErr = download(u, t.dest, t.hash, nil); lastErr == nil {
 				break
@@ -239,7 +238,7 @@ func importMrpack(j *Job, zr *zip.Reader, raw []byte, ref ModpackRef, nameOverri
 		}
 		mu.Lock()
 		done++
-		j.setStep(fmt.Sprintf("Lade Dateien des Modpacks … %d/%d", done, len(tasks)), 0.1+0.7*float64(done)/float64(len(tasks)))
+		j.setStep(sprintf("Lade Dateien des Modpacks … %d/%d", done, len(tasks)), 0.1+0.7*float64(done)/float64(len(tasks)))
 		if lastErr != nil {
 			res.Failed = append(res.Failed, fmt.Sprintf("%s: %v", t.name, lastErr))
 			j.logf("✗ %s: %v", t.name, lastErr)
@@ -262,11 +261,11 @@ func importMrpack(j *Job, zr *zip.Reader, raw []byte, ref ModpackRef, nameOverri
 func importCurseForgePack(j *Job, zr *zip.Reader, raw []byte, ref ModpackRef, nameOverride string) (*ModpackResult, error) {
 	var m cfManifest
 	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil, fmt.Errorf("manifest.json nicht lesbar: %w", err)
+		return nil, errf("manifest.json nicht lesbar: %w", err)
 	}
 	mc := m.Minecraft.Version
 	if mc == "" {
-		return nil, errors.New("Modpack nennt keine Minecraft-Version")
+		return nil, errNew("Modpack nennt keine Minecraft-Version")
 	}
 	loader, lv := "vanilla", ""
 	for _, l := range m.Minecraft.ModLoaders {
@@ -290,7 +289,7 @@ func importCurseForgePack(j *Job, zr *zip.Reader, raw []byte, ref ModpackRef, na
 	}
 	p, err := providerFor("curseforge")
 	if err != nil {
-		return nil, fmt.Errorf("CurseForge-Modpacks brauchen einen CurseForge-API-Key (Einstellungen)")
+		return nil, errf("CurseForge-Modpacks brauchen einen CurseForge-API-Key (Einstellungen)")
 	}
 	cf := p.(curseforge)
 	if ref.Name == "" {
@@ -361,7 +360,7 @@ func importCurseForgePack(j *Job, zr *zip.Reader, raw []byte, ref ModpackRef, na
 			name = "Projekt " + strconv.Itoa(f.ProjectID)
 		}
 		if !ok {
-			res.Failed = append(res.Failed, name+": Datei nicht gefunden")
+			res.Failed = append(res.Failed, name+": "+L("Datei nicht gefunden"))
 			continue
 		}
 		folder := folderFor(md.ClassID)
@@ -390,7 +389,7 @@ func importCurseForgePack(j *Job, zr *zip.Reader, raw []byte, ref ModpackRef, na
 		err := download(t.url, t.dest, t.hash, nil)
 		mu.Lock()
 		done++
-		j.setStep(fmt.Sprintf("Lade Dateien des Modpacks … %d/%d", done, len(tasks)), 0.15+0.65*float64(done)/float64(max(1, len(tasks))))
+		j.setStep(sprintf("Lade Dateien des Modpacks … %d/%d", done, len(tasks)), 0.15+0.65*float64(done)/float64(max(1, len(tasks))))
 		if err != nil {
 			res.Failed = append(res.Failed, fmt.Sprintf("%s: %v", t.name, err))
 			j.logf("✗ %s: %v", t.name, err)
@@ -448,12 +447,12 @@ func finishPack(j *Job, in *Instance, res *ModpackResult) (*ModpackResult, error
 		}
 	}
 	j.logf("Modpack installiert: %d Dateien%s.", res.Files-len(res.Failed)-len(res.Manual),
-		map[bool]string{true: fmt.Sprintf(", %d nur für Server übersprungen", res.Skipped), false: ""}[res.Skipped > 0])
+		map[bool]string{true: sprintf(", %d nur für Server übersprungen", res.Skipped), false: ""}[res.Skipped > 0])
 	if nin, err := loadInstance(in.ID); err == nil {
 		res.Instance = nin
 	}
 	if len(res.Failed) > 0 && res.Files > 0 && len(res.Failed) == res.Files {
-		return res, errors.New("keine Datei des Modpacks konnte geladen werden")
+		return res, errNew("keine Datei des Modpacks konnte geladen werden")
 	}
 	return res, nil
 }
@@ -501,16 +500,16 @@ func installModpackFromSource(j *Job, source, projectID, versionID, nameOverride
 		v = pickBest(vs)
 	}
 	if v == nil || v.File == nil {
-		return nil, fmt.Errorf("keine Version von „%s“ gefunden", proj.Name)
+		return nil, errf("keine Version von „%s“ gefunden", proj.Name)
 	}
 	if v.File.URL == "" {
-		return nil, fmt.Errorf("der Autor erlaubt keine Downloads über andere Programme – lade das Modpack auf %s herunter und importiere die Datei", v.File.ManualURL)
+		return nil, errf("der Autor erlaubt keine Downloads über andere Programme – lade das Modpack auf %s herunter und importiere die Datei", v.File.ManualURL)
 	}
 	j.logf("Lade Modpack %s %s …", proj.Name, v.Number)
 	tmp := filepath.Join(dataDir(), "tmp", fmt.Sprintf("modpack-%d.zip", time.Now().UnixNano()))
 	if err := download(v.File.URL, tmp, v.File.Hash, func(done, total int64) {
 		if total > 0 {
-			j.setStep(fmt.Sprintf("Lade Modpack … %d / %d MB", done>>20, total>>20), 0.1*float64(done)/float64(total))
+			j.setStep(sprintf("Lade Modpack … %d / %d MB", done>>20, total>>20), 0.1*float64(done)/float64(total))
 		}
 	}); err != nil {
 		return nil, err

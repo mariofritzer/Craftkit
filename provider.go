@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 )
@@ -73,11 +72,11 @@ func providerFor(source string) (Provider, error) {
 	case "curseforge":
 		key := strings.TrimSpace(getConfig().CurseForgeKey)
 		if key == "" {
-			return nil, fmt.Errorf("für CurseForge wird ein API-Key benötigt – bitte in den Einstellungen eintragen")
+			return nil, errf("für CurseForge wird ein API-Key benötigt – bitte in den Einstellungen eintragen")
 		}
 		return curseforge{key: key}, nil
 	}
-	return nil, fmt.Errorf("unbekannte Quelle %q", source)
+	return nil, errf("unbekannte Quelle %q", source)
 }
 
 var sourceNames = map[string]string{"modrinth": "Modrinth", "curseforge": "CurseForge"}

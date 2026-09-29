@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/url"
 	"strconv"
 	"time"
@@ -196,7 +195,7 @@ func (modrinth) Versions(projectID, kind, mc string, loaders []string) ([]ModVer
 	if len(out) == 0 && (kind == "plugin" || kind == "resourcepack" || kind == "shader") && mc != "" {
 		out, err = fetch(false)
 		for i := range out {
-			out[i].Note = fmt.Sprintf("nicht ausdrücklich für %s markiert", mc)
+			out[i].Note = sprintf("nicht ausdrücklich für %s markiert", mc)
 		}
 	}
 	return out, err

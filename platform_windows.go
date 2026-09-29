@@ -108,7 +108,7 @@ func launcherCandidates() []launcherCandidate {
 // detectLauncher returns a human label and how it will be started.
 func detectLauncher() (label, target string) {
 	if p := getConfig().LauncherPath; p != "" && fileExists(p) {
-		return "Eigener Pfad", p
+		return L("Eigener Pfad"), p
 	}
 	for _, c := range launcherCandidates() {
 		if fileExists(c.Path) {

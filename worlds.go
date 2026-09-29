@@ -4,7 +4,6 @@ package main
 
 import (
 	"archive/zip"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -101,7 +100,7 @@ func listWorldBackups(in *Instance, folder string) []*WorldBackup {
 
 func validWorldFolder(name string) error {
 	if name == "" || name != filepath.Base(name) || name == "." || name == ".." || strings.ContainsAny(name, `/\`) {
-		return errors.New("ungültiger Weltname")
+		return errNew("ungültiger Weltname")
 	}
 	return nil
 }
@@ -113,7 +112,7 @@ func backupWorld(j *Job, in *Instance, folder string, auto bool) (*WorldBackup, 
 	}
 	src := filepath.Join(in.Dir, "saves", folder)
 	if !fileExists(filepath.Join(src, "level.dat")) {
-		return nil, fmt.Errorf("Welt „%s“ nicht gefunden", folder)
+		return nil, errf("Welt „%s“ nicht gefunden", folder)
 	}
 	dir := worldBackupDir(in, folder)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -131,7 +130,7 @@ func backupWorld(j *Job, in *Instance, folder string, auto bool) (*WorldBackup, 
 	total := dirSize(src)
 	if err := zipDir(src, tmp, func(done int64) {
 		if j != nil && total > 0 {
-			j.setStep(fmt.Sprintf("Sichere „%s“ … %d / %d MB", folder, done>>20, total>>20), float64(done)/float64(total))
+			j.setStep(sprintf("Sichere „%s“ … %d / %d MB", folder, done>>20, total>>20), float64(done)/float64(total))
 		}
 	}); err != nil {
 		os.Remove(tmp)
@@ -189,7 +188,7 @@ func zipDir(src, dest string, progress func(done int64)) error {
 		}
 		in, err := os.Open(p)
 		if err != nil {
-			return fmt.Errorf("%s nicht lesbar (läuft das Spiel noch?): %w", rel, err)
+			return errf("%s nicht lesbar (läuft das Spiel noch?): %w", rel, err)
 		}
 		n, err := io.Copy(w, in)
 		in.Close()
@@ -215,17 +214,17 @@ func restoreWorld(j *Job, in *Instance, folder, file string) error {
 		return err
 	}
 	if file != filepath.Base(file) || !strings.HasSuffix(file, ".zip") {
-		return errors.New("ungültige Sicherung")
+		return errNew("ungültige Sicherung")
 	}
 	zipPath := filepath.Join(worldBackupDir(in, folder), file)
 	if !fileExists(zipPath) {
-		return errors.New("Sicherung nicht gefunden")
+		return errNew("Sicherung nicht gefunden")
 	}
 	target := filepath.Join(in.Dir, "saves", folder)
 	if fileExists(filepath.Join(target, "level.dat")) {
 		j.logf("Sichere zuerst den aktuellen Stand von „%s“ …", folder)
 		if _, err := backupWorld(j, in, folder, true); err != nil {
-			return fmt.Errorf("aktueller Stand konnte nicht gesichert werden – Wiederherstellung abgebrochen: %w", err)
+			return errf("aktueller Stand konnte nicht gesichert werden – Wiederherstellung abgebrochen: %w", err)
 		}
 	}
 	// extract into a temp folder first, then swap
@@ -235,7 +234,7 @@ func restoreWorld(j *Job, in *Instance, folder, file string) error {
 	if err != nil {
 		return err
 	}
-	j.setStep(fmt.Sprintf("Stelle „%s“ wieder her …", folder), -1)
+	j.setStep(sprintf("Stelle „%s“ wieder her …", folder), -1)
 	_, err = extractPrefix(&zr.Reader, "", tmp)
 	zr.Close()
 	if err != nil {
@@ -247,7 +246,7 @@ func restoreWorld(j *Job, in *Instance, folder, file string) error {
 	if fileExists(target) {
 		if err := os.Rename(target, old); err != nil {
 			os.RemoveAll(tmp)
-			return fmt.Errorf("Welt ist in Benutzung (läuft Minecraft noch?): %w", err)
+			return errf("Welt ist in Benutzung (läuft Minecraft noch?): %w", err)
 		}
 	}
 	if err := os.Rename(tmp, target); err != nil {
@@ -264,7 +263,7 @@ func deleteWorldBackup(in *Instance, folder, file string) error {
 		return err
 	}
 	if file != filepath.Base(file) || !strings.HasSuffix(file, ".zip") {
-		return errors.New("ungültige Sicherung")
+		return errNew("ungültige Sicherung")
 	}
 	return os.Remove(filepath.Join(worldBackupDir(in, folder), file))
 }

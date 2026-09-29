@@ -28,6 +28,11 @@ es muss nichts installiert werden (Windows 10/11, 64 Bit).
   Mods aus, legt eine passende Instanz an, übernimmt deine Mods in passenden Versionen und trägt den Server in die
   Mehrspieler-Liste ein.
 - **Plugin-Ordner** von Servern (Paper, Purpur, Spigot, Velocity …) mit Plugins samt Abhängigkeiten befüllen.
+- **Weitere Helfer**: Mods deaktivieren, einzelne Mods auf ältere Versionen setzen und festhalten, Rückgängig,
+  Absturzhilfe, Weltensicherung, Ressourcenpakete & Shader, Mod-Sets, Modpacks importieren und Instanzen als .mrpack teilen.
+- **14 Sprachen**: Deutsch, English, Español, Français, Italiano, Polski, Português (Brasil), Nederlands, Türkçe, Русский,
+  Українська, 简体中文, 日本語, 한국어. Die Übersetzungen sind automatisch erstellt – Fehler bitte über
+  „Einstellungen → Übersetzungsfehler melden“ oder direkt als [Issue](https://github.com/mariofritzer/Craftkit/issues/new?template=translation.yml) melden.
 
 ## CurseForge
 
@@ -62,6 +67,12 @@ Mit `-X 'main.defaultCurseForgeKey=…'` lässt sich ein CurseForge-Key voreinst
 `go build -tags mock` baut eine Testversion, die alle Online-Dienste simuliert.
 
 Neue Versionen veröffentlichen: auf GitHub unter *Releases → Draft a new release* einen Tag wie `v1.0.1` anlegen und veröffentlichen – GitHub Actions baut die exe und hängt sie ans Release.
+
+## Übersetzungen
+
+Deutsch ist die Ausgangssprache: Texte stehen im Code als `tr("…")` (Oberfläche) bzw. `L("…")`, `errf("…")`,
+`sprintf("…")` (Go). Die Übersetzungen liegen in `web/i18n/<sprache>.json` (deutscher Text → Übersetzung).
+`python3 tools/i18n_check.py` zeigt fehlende oder kaputte Einträge.
 
 ## Lizenz
 

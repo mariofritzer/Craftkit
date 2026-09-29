@@ -3,7 +3,6 @@
 package main
 
 import (
-	"errors"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -42,7 +41,7 @@ func isProcessRunning(names ...string) bool {
 
 func detectLauncher() (label, target string) {
 	if p := getConfig().LauncherPath; p != "" && fileExists(p) {
-		return "Eigener Pfad", p
+		return L("Eigener Pfad"), p
 	}
 	if runtime.GOOS == "darwin" && fileExists("/Applications/Minecraft.app") {
 		return "Minecraft Launcher", "/Applications/Minecraft.app"
@@ -56,7 +55,7 @@ func detectLauncher() (label, target string) {
 func startLauncher() error {
 	_, t := detectLauncher()
 	if t == "" {
-		return errors.New("Minecraft Launcher nicht gefunden – bitte Pfad in den Einstellungen angeben")
+		return errNew("Minecraft Launcher nicht gefunden – bitte Pfad in den Einstellungen angeben")
 	}
 	if runtime.GOOS == "darwin" {
 		return exec.Command("open", t).Start()

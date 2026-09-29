@@ -39,7 +39,7 @@ func loadTarget(typ, id string) (*Target, error) {
 		}
 		loaders := modLoadersFor(in.Loader)
 		if len(loaders) == 0 {
-			return nil, fmt.Errorf("Vanilla-Instanzen können keine Mods laden – lege eine Instanz mit Forge, NeoForge, Fabric oder Quilt an")
+			return nil, errf("Vanilla-Instanzen können keine Mods laden – lege eine Instanz mit Forge, NeoForge, Fabric oder Quilt an")
 		}
 		t := &Target{Type: typ, ID: id, Name: in.Name, Kind: "mod", MCVersion: in.MCVersion, Loaders: loaders,
 			Dir: filepath.Join(in.Dir, "mods"), Items: in.Items}
@@ -77,7 +77,7 @@ func loadTarget(typ, id string) (*Target, error) {
 			}
 		}
 		if pf == nil {
-			return nil, fmt.Errorf("Plugin-Ordner nicht gefunden")
+			return nil, errf("Plugin-Ordner nicht gefunden")
 		}
 		mf := &pluginManifestFile{}
 		mpath := filepath.Join(pf.Path, pluginManifest)
@@ -95,7 +95,7 @@ func loadTarget(typ, id string) (*Target, error) {
 		}
 		return t, nil
 	}
-	return nil, fmt.Errorf("unbekanntes Ziel")
+	return nil, errf("unbekanntes Ziel")
 }
 
 // ---------- plan ----------
@@ -251,7 +251,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 		q := queue[0]
 		queue = queue[1:]
 		if len(byKey) > 400 {
-			plan.Errors = append(plan.Errors, "Zu viele Abhängigkeiten – Abbruch.")
+			plan.Errors = append(plan.Errors, L("Zu viele Abhängigkeiten – Abbruch."))
 			break
 		}
 		p, err := r.provider(q.source)
@@ -264,7 +264,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 		if q.projectID == "" && q.versionID != "" {
 			v, err := p.Version("", q.versionID)
 			if err != nil {
-				plan.Errors = append(plan.Errors, fmt.Sprintf("Abhängigkeit von %s nicht gefunden: %v", q.requiredBy, err))
+				plan.Errors = append(plan.Errors, sprintf("Abhängigkeit von %s nicht gefunden: %v", q.requiredBy, err))
 				continue
 			}
 			q.projectID = v.ProjectID
@@ -286,7 +286,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 			if q.requiredBy != "" {
 				who = q.requiredBy
 			}
-			plan.Errors = append(plan.Errors, fmt.Sprintf("Projekt %s (%s) nicht abrufbar: %v", q.projectID, who, err))
+			plan.Errors = append(plan.Errors, sprintf("Projekt %s (%s) nicht abrufbar: %v", q.projectID, who, err))
 			continue
 		}
 		if proj.ID != "" && proj.ID != q.projectID {
@@ -314,7 +314,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 			for _, n := range []string{normName(proj.Name), normName(proj.Slug)} {
 				if other, ok := installedByName[n]; ok && n != "" {
 					item.Action = "keep"
-					item.Note = "bereits über " + sourceNames[other.Source] + " installiert"
+					item.Note = sprintf("bereits über %s installiert", sourceNames[other.Source])
 					item.Version = &ModVersion{Number: other.VersionNumber}
 					installed = other
 					break
@@ -329,7 +329,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 		if installed == nil && q.explicit {
 			for _, n := range []string{normName(proj.Name), normName(proj.Slug)} {
 				if other, ok := installedByName[n]; ok && n != "" && other.Source != q.source {
-					plan.Warnings = append(plan.Warnings, fmt.Sprintf("„%s“ ist schon über %s installiert – dann wäre die Mod doppelt vorhanden.", proj.Name, sourceNames[other.Source]))
+					plan.Warnings = append(plan.Warnings, sprintf("„%s“ ist schon über %s installiert – dann wäre die Mod doppelt vorhanden.", proj.Name, sourceNames[other.Source]))
 					break
 				}
 			}
@@ -338,10 +338,10 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 		if installed != nil && !q.explicit {
 			item.Action = "keep"
 			item.Version = &ModVersion{ID: installed.VersionID, Number: installed.VersionNumber}
-			item.Note = "bereits installiert"
+			item.Note = L("bereits installiert")
 			if installed.Disabled {
-				item.Note = "installiert, aber deaktiviert"
-				plan.Warnings = append(plan.Warnings, fmt.Sprintf("„%s“ ist deaktiviert, wird aber von „%s“ benötigt – bitte wieder aktivieren.", installed.Name, q.requiredBy))
+				item.Note = L("installiert, aber deaktiviert")
+				plan.Warnings = append(plan.Warnings, sprintf("„%s“ ist deaktiviert, wird aber von „%s“ benötigt – bitte wieder aktivieren.", installed.Name, q.requiredBy))
 			}
 			byKey[key] = item
 			plan.Items = append(plan.Items, item)
@@ -362,7 +362,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 		} else {
 			vs, err := p.Versions(q.projectID, t.Kind, t.MCVersion, t.Loaders)
 			if err != nil {
-				plan.Errors = append(plan.Errors, fmt.Sprintf("Versionen von „%s“ nicht abrufbar: %v", proj.Name, err))
+				plan.Errors = append(plan.Errors, sprintf("Versionen von „%s“ nicht abrufbar: %v", proj.Name, err))
 				continue
 			}
 			var ok []ModVersion
@@ -382,16 +382,16 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 			}
 		}
 		if v == nil && q.optional {
-			plan.Warnings = append(plan.Warnings, fmt.Sprintf("„%s“ gibt es nicht für %s %s – übersprungen.", proj.Name, strings.Join(t.Loaders, "/"), t.MCVersion))
+			plan.Warnings = append(plan.Warnings, sprintf("„%s“ gibt es nicht für %s %s – übersprungen.", proj.Name, strings.Join(t.Loaders, "/"), t.MCVersion))
 			continue
 		}
 		if v == nil {
-			msg := fmt.Sprintf("Keine passende Version von „%s“ für %s %s gefunden", proj.Name, strings.Join(t.Loaders, "/"), t.MCVersion)
+			msg := sprintf("Keine passende Version von „%s“ für %s %s gefunden", proj.Name, strings.Join(t.Loaders, "/"), t.MCVersion)
 			if q.requiredBy != "" {
-				msg += fmt.Sprintf(" (wird von „%s“ benötigt)", q.requiredBy)
+				msg += sprintf(" (wird von „%s“ benötigt)", q.requiredBy)
 			}
 			if installed != nil {
-				msg += " Die installierte Version bleibt, passt aber evtl. nicht."
+				msg += L(" Die installierte Version bleibt, passt aber evtl. nicht.")
 			}
 			plan.Errors = append(plan.Errors, msg+".")
 			continue
@@ -399,7 +399,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 		item.Version = v
 		item.Note = v.Note
 		if v.File == nil {
-			plan.Errors = append(plan.Errors, fmt.Sprintf("„%s“ %s hat keine Datei zum Herunterladen.", proj.Name, v.Number))
+			plan.Errors = append(plan.Errors, sprintf("„%s“ %s hat keine Datei zum Herunterladen.", proj.Name, v.Number))
 			continue
 		}
 		item.Manual = v.File.URL == ""
@@ -410,22 +410,22 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 			item.Action = "install"
 		case installed.VersionID == v.ID:
 			item.Action = "keep"
-			item.Note = "bereits aktuell"
+			item.Note = L("bereits aktuell")
 			if q.pin && !installed.Pinned {
-				item.Note = "wird festgehalten"
+				item.Note = L("wird festgehalten")
 			}
 		case q.versionID == "" && installed.Pinned && installedCompatible:
 			item.Action = "keep"
-			item.Note = "festgehalten auf " + installed.VersionNumber
+			item.Note = sprintf("festgehalten auf %s", installed.VersionNumber)
 		case q.versionID == "" && installedCompatible && installed.InstalledVersionDate() != "" && v.Date <= installed.InstalledVersionDate():
 			item.Action = "keep"
-			item.Note = "bereits aktuell"
+			item.Note = L("bereits aktuell")
 		default:
 			item.Action = "update"
 			item.FromVersion = installed.VersionNumber
 			item.Downgrade = installed.VersionDate != "" && v.Date != "" && v.Date < installed.VersionDate
 			if !installedCompatible {
-				item.Note = "installierte Version passt nicht zu " + t.MCVersion
+				item.Note = sprintf("installierte Version passt nicht zu %s", t.MCVersion)
 			}
 		}
 		byKey[key] = item
@@ -481,7 +481,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 			name = it.Name
 		}
 		if name != "" {
-			plan.Conflicts = append(plan.Conflicts, fmt.Sprintf("„%s“ ist laut Autor nicht mit „%s“ kompatibel.", ic.by, name))
+			plan.Conflicts = append(plan.Conflicts, sprintf("„%s“ ist laut Autor nicht mit „%s“ kompatibel.", ic.by, name))
 		}
 	}
 	// installed mods that declared the new ones incompatible
@@ -491,7 +491,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 		}
 		for _, bad := range inst.Incompatible {
 			if pi, ok := byKey[bad]; ok && pi.Action != "keep" {
-				plan.Conflicts = append(plan.Conflicts, fmt.Sprintf("Das installierte „%s“ ist laut Autor nicht mit „%s“ kompatibel.", inst.Name, pi.Name))
+				plan.Conflicts = append(plan.Conflicts, sprintf("Das installierte „%s“ ist laut Autor nicht mit „%s“ kompatibel.", inst.Name, pi.Name))
 			}
 		}
 	}
@@ -543,7 +543,7 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 		return nil, err
 	}
 	res := &ApplyResult{Dir: t.Dir}
-	snap := beginSnapshot(t, "Änderung")
+	snap := beginSnapshot(t, L("Änderung"))
 	hasUpdates := false
 	for _, it := range plan.Items {
 		if it.Action == "update" && !it.Manual {
@@ -575,7 +575,7 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 	for i, it := range todo {
 		base := float64(i) / float64(len(todo))
 		span := 1 / float64(len(todo))
-		j.setStep(fmt.Sprintf("Lade %s (%d/%d) …", it.Name, i+1, len(todo)), base)
+		j.setStep(sprintf("Lade %s (%d/%d) …", it.Name, i+1, len(todo)), base)
 		f := it.Version.File
 		name := safeFileName(f.FileName)
 		dest := filepath.Join(t.Dir, name)
@@ -633,7 +633,7 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 		} else {
 			tag := ""
 			if !it.Explicit && len(it.RequiredBy) > 0 {
-				tag = " (benötigt von " + strings.Join(it.RequiredBy, ", ") + ")"
+				tag = " (" + sprintf("benötigt von %s", strings.Join(it.RequiredBy, ", ")) + ")"
 			}
 			j.logf("✓ %s %s%s", it.Name, it.Version.Number, tag)
 			res.Installed = append(res.Installed, it.Name)
@@ -648,7 +648,7 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 		j.logf("⚠ %s muss manuell von der Website geladen werden: %s", m.Name, m.Version.File.ManualURL)
 	}
 	if len(res.Failed) > 0 && len(res.Installed)+len(res.Updated) == 0 {
-		return res, fmt.Errorf("keine Datei konnte installiert werden")
+		return res, errf("keine Datei konnte installiert werden")
 	}
 	return res, nil
 }
@@ -706,7 +706,7 @@ func removeItem(t *Target, key string, withOrphans bool) ([]string, error) {
 	defer instMu.Unlock()
 	it := t.Items[key]
 	if it == nil {
-		return nil, fmt.Errorf("nicht installiert")
+		return nil, errf("nicht installiert")
 	}
 	var victims []*InstalledItem
 	if withOrphans {
@@ -719,7 +719,7 @@ func removeItem(t *Target, key string, withOrphans bool) ([]string, error) {
 	for _, v := range victims {
 		if v.FileName != "" {
 			if err := snap.moveOut(t, v.DiskName()); err != nil {
-				return removed, fmt.Errorf("%s konnte nicht entfernt werden (läuft Minecraft noch?): %w", v.FileName, err)
+				return removed, errf("%s konnte nicht entfernt werden (läuft Minecraft noch?): %w", v.FileName, err)
 			}
 		}
 		delete(t.Items, v.Key)
@@ -735,7 +735,7 @@ func setEnabled(t *Target, key, file string, enabled bool) error {
 	if key != "" {
 		it := t.Items[key]
 		if it == nil {
-			return fmt.Errorf("nicht installiert")
+			return errf("nicht installiert")
 		}
 		if it.Disabled == !enabled {
 			return nil
@@ -745,13 +745,13 @@ func setEnabled(t *Target, key, file string, enabled bool) error {
 		to := filepath.Join(t.Dir, it.DiskName())
 		if err := os.Rename(from, to); err != nil {
 			it.Disabled = enabled
-			return fmt.Errorf("%s konnte nicht umbenannt werden (läuft Minecraft noch?): %w", filepath.Base(from), err)
+			return errf("%s konnte nicht umbenannt werden (läuft Minecraft noch?): %w", filepath.Base(from), err)
 		}
 		return t.save()
 	}
 	name := safeFileName(file)
 	if name != file {
-		return fmt.Errorf("ungültiger Dateiname")
+		return errf("ungültiger Dateiname")
 	}
 	base := strings.TrimSuffix(name, ".disabled")
 	from, to := filepath.Join(t.Dir, base+".disabled"), filepath.Join(t.Dir, base)
@@ -759,7 +759,7 @@ func setEnabled(t *Target, key, file string, enabled bool) error {
 		from, to = to, from
 	}
 	if err := os.Rename(from, to); err != nil {
-		return fmt.Errorf("%s konnte nicht umbenannt werden (läuft Minecraft noch?): %w", filepath.Base(from), err)
+		return errf("%s konnte nicht umbenannt werden (läuft Minecraft noch?): %w", filepath.Base(from), err)
 	}
 	return nil
 }
@@ -770,20 +770,20 @@ func changeLabel(nInst, nUpd, nRem int, inst, upd, rem []string) string {
 		if len(names) <= 2 {
 			return strings.Join(names, ", ")
 		}
-		return fmt.Sprintf("%s, %s und %d weitere", names[0], names[1], len(names)-2)
+		return sprintf("%s, %s und %d weitere", names[0], names[1], len(names)-2)
 	}
 	var parts []string
 	if nInst > 0 {
-		parts = append(parts, short(inst)+" installiert")
+		parts = append(parts, sprintf("%s installiert", short(inst)))
 	}
 	if nUpd > 0 {
-		parts = append(parts, short(upd)+" aktualisiert")
+		parts = append(parts, sprintf("%s aktualisiert", short(upd)))
 	}
 	if nRem > 0 {
-		parts = append(parts, short(rem)+" entfernt")
+		parts = append(parts, sprintf("%s entfernt", short(rem)))
 	}
 	if len(parts) == 0 {
-		return "Änderung"
+		return L("Änderung")
 	}
 	return strings.Join(parts, "; ")
 }
@@ -794,7 +794,7 @@ func setPinned(t *Target, key string, pinned bool) error {
 	defer instMu.Unlock()
 	it := t.Items[key]
 	if it == nil {
-		return fmt.Errorf("nicht installiert")
+		return errf("nicht installiert")
 	}
 	it.Pinned = pinned
 	if err := t.save(); err != nil {

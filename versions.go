@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/xml"
-	"fmt"
 	"net/url"
 	"sort"
 	"strconv"
@@ -103,7 +102,7 @@ func supportedGameVersions(loader string) (map[string]bool, error) {
 			}
 		}
 	default:
-		return nil, fmt.Errorf("unbekannter Loader %q", loader)
+		return nil, errf("unbekannter Loader %q", loader)
 	}
 	return set, nil
 }
@@ -195,7 +194,7 @@ func loaderVersionsFor(loader, mc string) ([]LoaderVersion, error) {
 		}
 		sort.SliceStable(out, func(i, k int) bool { return compareVersions(out[i].Version, out[k].Version) > 0 })
 	default:
-		return nil, fmt.Errorf("unbekannter Loader %q", loader)
+		return nil, errf("unbekannter Loader %q", loader)
 	}
 	// mark first stable as recommended if nothing else is
 	hasRec := false
@@ -232,7 +231,7 @@ func mavenVersions(metaURL string) ([]string, error) {
 	}
 	var m mavenMetadata
 	if err := xml.Unmarshal(b, &m); err != nil {
-		return nil, fmt.Errorf("maven-metadata nicht lesbar: %w", err)
+		return nil, errf("maven-metadata nicht lesbar: %w", err)
 	}
 	return m.Versioning.Versions.Version, nil
 }

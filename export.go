@@ -8,7 +8,6 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -61,7 +60,7 @@ func exportInstance(id string, o ExportOptions) (*ExportResult, error) {
 		return nil, err
 	}
 	if in.Loader == "vanilla" && len(in.Items) == 0 && !o.Config && !o.ResourcePacks {
-		return nil, errors.New("die Instanz enthält nichts zum Teilen")
+		return nil, errNew("die Instanz enthält nichts zum Teilen")
 	}
 	if strings.TrimSpace(o.Name) == "" {
 		o.Name = in.Name
@@ -187,7 +186,7 @@ func exportInstance(id string, o ExportOptions) (*ExportResult, error) {
 
 	idx := map[string]any{
 		"formatVersion": 1, "game": "minecraft", "versionId": o.Version, "name": o.Name,
-		"summary": fmt.Sprintf("Mit CraftKit exportiert aus „%s“", in.Name), "files": files, "dependencies": deps,
+		"summary": sprintf("Mit CraftKit exportiert aus „%s“", in.Name), "files": files, "dependencies": deps,
 	}
 	if files == nil {
 		idx["files"] = []mrpackFile{}

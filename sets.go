@@ -3,7 +3,6 @@ package main
 // Curated mod sets and the shader loader check.
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -26,6 +25,16 @@ var modSets = []ModSet{
 		[]string{"xaeros-minimap", "xaeros-world-map"}},
 	{"shaders", "✨", "Shader-Grundlage", "Alles, was für Shader nötig ist – danach unter „Shader“ ein Shaderpack wählen.",
 		[]string{"iris", "oculus"}},
+}
+
+// translatedSets returns the mod sets in the current UI language.
+func translatedSets() []ModSet {
+	out := make([]ModSet, len(modSets))
+	for i, s := range modSets {
+		s.Name, s.Description = L(s.Name), L(s.Description)
+		out[i] = s
+	}
+	return out
 }
 
 // resolveSlugs maps Modrinth slugs to project ids (one request).
@@ -61,7 +70,7 @@ func modSetRequests(id string) ([]PlanRequest, error) {
 		}
 		return reqs, nil
 	}
-	return nil, fmt.Errorf("unbekanntes Mod-Set")
+	return nil, errNew("unbekanntes Mod-Set")
 }
 
 // ShaderHelp tells the UI whether shaders can run and which mod would enable them.
@@ -89,7 +98,7 @@ func shaderHelp(in *Instance) *ShaderHelp {
 	}
 	switch in.Loader {
 	case "vanilla":
-		h.Message = "Shader brauchen einen Mod-Loader. Lege eine Instanz mit Fabric oder NeoForge an und installiere dort Iris."
+		h.Message = L("Shader brauchen einen Mod-Loader. Lege eine Instanz mit Fabric oder NeoForge an und installiere dort Iris.")
 		return h
 	case "forge":
 		h.Suggest = "oculus"
@@ -100,6 +109,6 @@ func shaderHelp(in *Instance) *ShaderHelp {
 		h.SuggestID = ids[h.Suggest]
 	}
 	name := map[string]string{"iris": "Iris", "oculus": "Oculus"}[h.Suggest]
-	h.Message = fmt.Sprintf("Für Shader brauchst du die Mod %s – ohne sie werden Shaderpacks nicht geladen.", name)
+	h.Message = sprintf("Für Shader brauchst du die Mod %s – ohne sie werden Shaderpacks nicht geladen.", name)
 	return h
 }

@@ -5,8 +5,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -105,19 +103,19 @@ func rollbackLast(t *Target) (*Snapshot, error) {
 	defer instMu.Unlock()
 	list := loadHistory(t)
 	if len(list) == 0 {
-		return nil, errors.New("es gibt nichts rückgängig zu machen")
+		return nil, errNew("es gibt nichts rückgängig zu machen")
 	}
 	s := list[0]
 	dir := filepath.Join(historyDir(t), s.ID)
 	for _, name := range s.Added {
 		p := filepath.Join(t.Dir, name)
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			return nil, fmt.Errorf("%s konnte nicht entfernt werden (läuft Minecraft noch?): %w", name, err)
+			return nil, errf("%s konnte nicht entfernt werden (läuft Minecraft noch?): %w", name, err)
 		}
 	}
 	for _, name := range s.Moved {
 		if err := os.Rename(filepath.Join(dir, name), filepath.Join(t.Dir, name)); err != nil && !os.IsNotExist(err) {
-			return nil, fmt.Errorf("%s konnte nicht wiederhergestellt werden: %w", name, err)
+			return nil, errf("%s konnte nicht wiederhergestellt werden: %w", name, err)
 		}
 	}
 	t.Items = s.Items

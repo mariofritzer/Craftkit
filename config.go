@@ -22,6 +22,7 @@ type Config struct {
 	AutoBackupWorlds *bool          `json:"autoBackupWorlds,omitempty"` // default on
 	// instances that live outside InstancesDir (profiles taken over from the launcher): id -> folder
 	LinkedInstances map[string]string `json:"linkedInstances"`
+	Language        string            `json:"language"` // UI language, empty = system language
 }
 
 type PluginFolder struct {

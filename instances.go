@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -76,12 +75,12 @@ func instanceIDExists(id string) bool {
 
 func loadInstance(id string) (*Instance, error) {
 	if id == "" || strings.ContainsAny(id, `/\.`) {
-		return nil, fmt.Errorf("ungültige Instanz")
+		return nil, errf("ungültige Instanz")
 	}
 	dir := instanceDir(id)
 	b, err := os.ReadFile(filepath.Join(dir, instanceManifest))
 	if err != nil {
-		return nil, fmt.Errorf("Instanz %q nicht gefunden", id)
+		return nil, errf("Instanz %q nicht gefunden", id)
 	}
 	var in Instance
 	if err := json.Unmarshal(b, &in); err != nil {
@@ -177,13 +176,13 @@ func createInstance(j *Job, req CreateInstanceReq) (*Instance, error) {
 		req.Name = loaderNames[req.Loader] + " " + req.MCVersion
 	}
 	if _, ok := loaderNames[req.Loader]; !ok {
-		return nil, fmt.Errorf("unbekannter Loader")
+		return nil, errf("unbekannter Loader")
 	}
 	if req.MCVersion == "" {
-		return nil, fmt.Errorf("keine Minecraft-Version gewählt")
+		return nil, errf("keine Minecraft-Version gewählt")
 	}
 	if req.Loader != "vanilla" && req.LoaderVersion == "" {
-		return nil, fmt.Errorf("keine %s-Version gewählt", loaderNames[req.Loader])
+		return nil, errf("keine %s-Version gewählt", loaderNames[req.Loader])
 	}
 	base := slugify(req.Name)
 	id := base
@@ -191,7 +190,7 @@ func createInstance(j *Job, req CreateInstanceReq) (*Instance, error) {
 		id = fmt.Sprintf("%s-%d", base, n)
 	}
 
-	j.setStep("Installiere "+loaderNames[req.Loader]+" …", -1)
+	j.setStep(sprintf("Installiere %s …", loaderNames[req.Loader]), -1)
 	versionID, err := installLoader(j, req.Loader, req.MCVersion, req.LoaderVersion)
 	if err != nil {
 		return nil, err
@@ -217,7 +216,7 @@ func createInstance(j *Job, req CreateInstanceReq) (*Instance, error) {
 	}
 	j.setStep("Trage Profil im Minecraft Launcher ein …", 0.95)
 	if err := writeLauncherProfile(in); err != nil {
-		return nil, fmt.Errorf("Profil konnte nicht eingetragen werden: %w", err)
+		return nil, errf("Profil konnte nicht eingetragen werden: %w", err)
 	}
 	j.logf("Profil „%s“ im Minecraft Launcher angelegt (Version %s).", in.Name, versionID)
 	return in, nil
@@ -248,7 +247,7 @@ func installLoader(j *Job, loader, mc, lv string) (string, error) {
 			ID string `json:"id"`
 		}
 		if err := json.Unmarshal(b, &meta); err != nil || meta.ID == "" {
-			return "", fmt.Errorf("ungültiges %s-Profil", loaderNames[loader])
+			return "", errf("ungültiges %s-Profil", loaderNames[loader])
 		}
 		vdir := filepath.Join(mcDir, "versions", meta.ID)
 		if err := os.MkdirAll(vdir, 0o755); err != nil {
@@ -267,7 +266,7 @@ func installLoader(j *Job, loader, mc, lv string) (string, error) {
 	case "forge", "neoforge":
 		return installForgeLike(j, loader, mc, lv)
 	}
-	return "", fmt.Errorf("unbekannter Loader")
+	return "", errf("unbekannter Loader")
 }
 
 func listVersionDirs(mcDir string) map[string]bool {
@@ -314,14 +313,14 @@ func installForgeLike(j *Job, loader, mc, lv string) (string, error) {
 	j.logf("Lade %s-Installer %s …", loaderNames[loader], lv)
 	if err := download(installerURL, installer, nil, func(done, total int64) {
 		if total > 0 {
-			j.setStep(fmt.Sprintf("Lade Installer … %d%%", done*100/total), float64(done)/float64(total)*0.2)
+			j.setStep(sprintf("Lade Installer … %d%%", done*100/total), float64(done)/float64(total)*0.2)
 		}
 	}); err != nil {
-		return "", fmt.Errorf("Installer-Download fehlgeschlagen: %w", err)
+		return "", errf("Installer-Download fehlgeschlagen: %w", err)
 	}
 	defer os.Remove(installer)
 
-	j.setStep(loaderNames[loader]+" wird installiert (lädt Bibliotheken, kann einige Minuten dauern) …", -1)
+	j.setStep(sprintf("%s wird installiert (lädt Bibliotheken, kann einige Minuten dauern) …", loaderNames[loader]), -1)
 	flags := [][]string{{"--installClient", mcDir}, {"--install-client", mcDir}}
 	if loader == "neoforge" {
 		flags = [][]string{{"--install-client", mcDir}, {"--installClient", mcDir}}
@@ -359,9 +358,9 @@ func installForgeLike(j *Job, loader, mc, lv string) (string, error) {
 		return newID, nil
 	}
 	if runErr != nil {
-		return "", fmt.Errorf("%s-Installation fehlgeschlagen: %w", loaderNames[loader], runErr)
+		return "", errf("%s-Installation fehlgeschlagen: %w", loaderNames[loader], runErr)
 	}
-	return "", fmt.Errorf("%s-Installation wurde nicht abgeschlossen", loaderNames[loader])
+	return "", errf("%s-Installation wurde nicht abgeschlossen", loaderNames[loader])
 }
 
 func findNewVersion(mcDir string, before map[string]bool, expected []string, loader string) string {
@@ -413,7 +412,7 @@ func runJava(j *Job, java, dir string, args []string) error {
 		j.setStep("Installer: "+truncate(line, 90), -1)
 	}
 	if err := cmd.Wait(); err != nil {
-		return fmt.Errorf("%v – %s", err, strings.Join(tail, " | "))
+		return errf("%v – %s", err, strings.Join(tail, " | "))
 	}
 	return nil
 }
@@ -472,7 +471,7 @@ func editProfiles(fn func(profiles map[string]any) error) error {
 		root := map[string]any{}
 		if len(strings.TrimSpace(string(b))) > 0 {
 			if err := json.Unmarshal(b, &root); err != nil {
-				return fmt.Errorf("%s ist beschädigt: %w", filepath.Base(f), err)
+				return errf("%s ist beschädigt: %w", filepath.Base(f), err)
 			}
 		}
 		profiles, _ := root["profiles"].(map[string]any)
@@ -557,7 +556,7 @@ func deleteInstance(id string, deleteFiles bool) error {
 		abs, _ := filepath.Abs(in.Dir)
 		mc, _ := filepath.Abs(getConfig().MinecraftDir)
 		if strings.EqualFold(abs, mc) || len(abs) < 8 {
-			return errors.New("dieser Ordner wird aus Sicherheitsgründen nicht gelöscht")
+			return errNew("dieser Ordner wird aus Sicherheitsgründen nicht gelöscht")
 		}
 		return os.RemoveAll(in.Dir)
 	}
@@ -576,7 +575,7 @@ func updateInstanceSettings(id, name string, memoryGB int) (*Instance, error) {
 		in.Name = strings.TrimSpace(name)
 	}
 	if memoryGB < 0 || memoryGB > 64 {
-		return nil, errors.New("ungültige RAM-Angabe")
+		return nil, errNew("ungültige RAM-Angabe")
 	}
 	in.MemoryGB = memoryGB
 	if err := in.save(); err != nil {

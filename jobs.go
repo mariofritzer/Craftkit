@@ -36,7 +36,7 @@ func startJob(title string, fn func(j *Job) (any, error)) *Job {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				j.fail(fmt.Errorf("interner Fehler: %v", r))
+				j.fail(errf("interner Fehler: %v", r))
 			}
 		}()
 		res, err := fn(j)
@@ -48,7 +48,7 @@ func startJob(title string, fn func(j *Job) (any, error)) *Job {
 		j.Status = "done"
 		j.Progress = 1
 		j.Result = res
-		j.Log = append(j.Log, "Fertig.")
+		j.Log = append(j.Log, L("Fertig."))
 		j.mu.Unlock()
 	}()
 	return j
@@ -59,12 +59,12 @@ func (j *Job) fail(err error) {
 	defer j.mu.Unlock()
 	j.Status = "error"
 	j.Error = err.Error()
-	j.Log = append(j.Log, "Fehler: "+err.Error())
+	j.Log = append(j.Log, L("Fehler: ")+err.Error())
 	logf("job %s failed: %v", j.Title, err)
 }
 
 func (j *Job) logf(format string, a ...any) {
-	msg := fmt.Sprintf(format, a...)
+	msg := fmt.Sprintf(L(format), a...)
 	j.mu.Lock()
 	j.Log = append(j.Log, msg)
 	if len(j.Log) > 500 {
@@ -76,7 +76,7 @@ func (j *Job) logf(format string, a ...any) {
 
 func (j *Job) setStep(step string, progress float64) {
 	j.mu.Lock()
-	j.Step = step
+	j.Step = L(step)
 	j.Progress = progress
 	j.mu.Unlock()
 }

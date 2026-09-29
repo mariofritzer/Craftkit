@@ -8,8 +8,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"io"
 	"net"
 	"regexp"
@@ -59,7 +57,7 @@ func parseAddress(addr string) (host string, port int, explicitPort bool, err er
 	addr = strings.TrimSpace(addr)
 	addr = strings.TrimPrefix(strings.TrimPrefix(addr, "minecraft://"), "mc://")
 	if addr == "" {
-		return "", 0, false, errors.New("bitte eine Server-Adresse eingeben")
+		return "", 0, false, errNew("bitte eine Server-Adresse eingeben")
 	}
 	host, portStr, splitErr := net.SplitHostPort(addr)
 	if splitErr != nil {
@@ -67,7 +65,7 @@ func parseAddress(addr string) (host string, port int, explicitPort bool, err er
 	}
 	p, err := strconv.Atoi(portStr)
 	if err != nil || p <= 0 || p > 65535 {
-		return "", 0, false, errors.New("ungültiger Port")
+		return "", 0, false, errNew("ungültiger Port")
 	}
 	return host, p, true, nil
 }
@@ -88,7 +86,7 @@ func pingServer(addr string) (*ServerInfo, error) {
 	start := time.Now()
 	conn, err := net.DialTimeout("tcp", net.JoinHostPort(connectHost, strconv.Itoa(connectPort)), 6*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("Server %s nicht erreichbar (%v)", addr, simplifyNetErr(err))
+		return nil, errf("Server %s nicht erreichbar (%v)", addr, simplifyNetErr(err))
 	}
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(8 * time.Second))
@@ -110,14 +108,14 @@ func pingServer(addr string) (*ServerInfo, error) {
 	}
 	r := bufio.NewReader(conn)
 	if _, err := readVarInt(r); err != nil { // packet length
-		return nil, fmt.Errorf("keine Antwort vom Server (ist das ein Minecraft-Java-Server?)")
+		return nil, errf("keine Antwort vom Server (ist das ein Minecraft-Java-Server?)")
 	}
 	if id, err := readVarInt(r); err != nil || id != 0 {
-		return nil, fmt.Errorf("unerwartete Antwort vom Server")
+		return nil, errf("unerwartete Antwort vom Server")
 	}
 	n, err := readVarInt(r)
 	if err != nil || n <= 0 || n > 8<<20 {
-		return nil, fmt.Errorf("ungültige Antwort vom Server")
+		return nil, errf("ungültige Antwort vom Server")
 	}
 	buf := make([]byte, n)
 	if _, err := io.ReadFull(r, buf); err != nil {
@@ -136,11 +134,11 @@ func simplifyNetErr(err error) string {
 	s := err.Error()
 	switch {
 	case strings.Contains(s, "no such host"):
-		return "Adresse unbekannt"
+		return L("Adresse unbekannt")
 	case strings.Contains(s, "refused"):
-		return "Verbindung abgelehnt"
+		return L("Verbindung abgelehnt")
 	case strings.Contains(s, "timeout"):
-		return "Zeitüberschreitung"
+		return L("Zeitüberschreitung")
 	}
 	return s
 }
@@ -178,7 +176,7 @@ func parseStatusJSON(b []byte) (*ServerInfo, error) {
 		PreventsChatReports bool `json:"preventsChatReports"`
 	}
 	if err := json.Unmarshal(b, &st); err != nil {
-		return nil, fmt.Errorf("Server-Antwort nicht lesbar: %w", err)
+		return nil, errf("Server-Antwort nicht lesbar: %w", err)
 	}
 	info := &ServerInfo{VersionName: stripFormatting(st.Version.Name), Protocol: st.Version.Protocol,
 		PlayersOnline: st.Players.Online, PlayersMax: st.Players.Max, Favicon: st.Favicon}
@@ -259,7 +257,7 @@ func parseStatusJSON(b []byte) (*ServerInfo, error) {
 func decodeForgeData(s string) (mods []ServerMod, truncated bool, err error) {
 	rs := []rune(s)
 	if len(rs) < 2 {
-		return nil, false, errors.New("zu kurz")
+		return nil, false, errNew("zu kurz")
 	}
 	size := int(rs[0]) | int(rs[1])<<15
 	var out []byte
@@ -396,7 +394,7 @@ func readVarInt(r io.ByteReader) (int, error) {
 			return int(int32(v)), nil
 		}
 	}
-	return 0, errors.New("VarInt zu lang")
+	return 0, errNew("VarInt zu lang")
 }
 
 func readString(r *bytes.Reader) (string, error) {
@@ -405,7 +403,7 @@ func readString(r *bytes.Reader) (string, error) {
 		return "", err
 	}
 	if n < 0 || n > r.Len() {
-		return "", errors.New("ungültige Länge")
+		return "", errNew("ungültige Länge")
 	}
 	b := make([]byte, n)
 	if _, err := io.ReadFull(r, b); err != nil {

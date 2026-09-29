@@ -1,0 +1,33 @@
+name: Übersetzungsfehler / Translation mistake
+description: Ein Text in CraftKit ist falsch oder seltsam übersetzt. / A text in CraftKit is translated wrongly.
+title: "[translation] "
+labels: ["translation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke fürs Melden! Thanks for reporting! You can write in English, German or your own language.
+  - type: input
+    id: language
+    attributes:
+      label: Sprache / Language
+      placeholder: "z. B. / e.g. Français (fr)"
+    validations:
+      required: true
+  - type: textarea
+    id: wrong
+    attributes:
+      label: Falscher Text / Wrong text
+      description: Wie steht es jetzt da? Wo in CraftKit? / What does it say now, and where in CraftKit?
+    validations:
+      required: true
+  - type: textarea
+    id: better
+    attributes:
+      label: Besserer Vorschlag / Better suggestion
+      description: Wie sollte es heißen? / What should it say?
+  - type: input
+    id: version
+    attributes:
+      label: CraftKit-Version
+      placeholder: "z. B. / e.g. 1.2.0"
