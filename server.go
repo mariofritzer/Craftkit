@@ -69,7 +69,11 @@ func main() {
 		if resp, err2 := c.Get(addr + "/api/hello"); err2 == nil {
 			resp.Body.Close()
 			if resp.Header.Get("X-App") == appName {
-				openAppWindow(addr + "/")
+				// already running: bring its window forward instead of opening a second one
+				if !focusExistingUI() {
+					openAppWindow(addr + "/")
+					time.Sleep(3 * time.Second) // keep our foreground right while the window appears
+				}
 				return
 			}
 		}

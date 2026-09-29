@@ -6,8 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
+	"time"
+	"unsafe"
 )
 
 const createNoWindow = 0x08000000
@@ -26,6 +29,8 @@ func openBrowser(u string) error {
 
 // openAppWindow opens the UI in a chromeless Edge/Chrome window if possible.
 func openAppWindow(u string) error {
+	allowForeground()
+	go bringUIToFront(20 * time.Second)
 	var cands []string
 	for _, pf := range []string{os.Getenv("ProgramFiles(x86)"), os.Getenv("ProgramFiles"), os.Getenv("LOCALAPPDATA")} {
 		if pf == "" {
@@ -131,4 +136,118 @@ func startLauncher() error {
 	cmd := exec.Command(target)
 	cmd.Dir = filepath.Dir(target)
 	return cmd.Start()
+}
+
+// ---------- bringing the UI window to the foreground ----------
+
+var (
+	user32                       = syscall.NewLazyDLL("user32.dll")
+	kernel32                     = syscall.NewLazyDLL("kernel32.dll")
+	procEnumWindows              = user32.NewProc("EnumWindows")
+	procGetWindowTextW           = user32.NewProc("GetWindowTextW")
+	procGetClassNameW            = user32.NewProc("GetClassNameW")
+	procIsWindowVisible          = user32.NewProc("IsWindowVisible")
+	procIsIconic                 = user32.NewProc("IsIconic")
+	procShowWindow               = user32.NewProc("ShowWindow")
+	procSetForegroundWindow      = user32.NewProc("SetForegroundWindow")
+	procGetForegroundWindow      = user32.NewProc("GetForegroundWindow")
+	procBringWindowToTop         = user32.NewProc("BringWindowToTop")
+	procSetWindowPos             = user32.NewProc("SetWindowPos")
+	procGetWindowThreadProcessId = user32.NewProc("GetWindowThreadProcessId")
+	procAttachThreadInput        = user32.NewProc("AttachThreadInput")
+	procAllowSetForegroundWindow = user32.NewProc("AllowSetForegroundWindow")
+	procGetCurrentThreadId       = kernel32.NewProc("GetCurrentThreadId")
+)
+
+// allowForeground lets the browser we start take the foreground (we got that right from the user's double click).
+func allowForeground() {
+	const asfwAny = ^uintptr(0) // ASFW_ANY = (DWORD)-1
+	procAllowSetForegroundWindow.Call(asfwAny)
+}
+
+func windowText(h uintptr, proc *syscall.LazyProc) string {
+	buf := make([]uint16, 256)
+	proc.Call(h, uintptr(unsafe.Pointer(&buf[0])), uintptr(len(buf)))
+	return syscall.UTF16ToString(buf)
+}
+
+// findUIWindow looks for the visible Edge/Chrome app window showing CraftKit.
+func findUIWindow() uintptr {
+	var found uintptr
+	cb := syscall.NewCallback(func(h, _ uintptr) uintptr {
+		if v, _, _ := procIsWindowVisible.Call(h); v == 0 {
+			return 1
+		}
+		if windowText(h, procGetClassNameW) != "Chrome_WidgetWin_1" {
+			return 1
+		}
+		if t := windowText(h, procGetWindowTextW); t == appName || strings.HasPrefix(t, appName+" ") {
+			found = h
+			return 0
+		}
+		return 1
+	})
+	procEnumWindows.Call(cb, 0)
+	return found
+}
+
+// forceForeground brings h to the front, working around Windows' foreground lock.
+func forceForeground(h uintptr) bool {
+	const swRestore = 9
+	if ic, _, _ := procIsIconic.Call(h); ic != 0 {
+		procShowWindow.Call(h, swRestore)
+	}
+	if r, _, _ := procSetForegroundWindow.Call(h); r != 0 {
+		return true
+	}
+	// attach to the thread that currently owns the foreground and try again
+	fg, _, _ := procGetForegroundWindow.Call()
+	fgThread, _, _ := procGetWindowThreadProcessId.Call(fg, 0)
+	me, _, _ := procGetCurrentThreadId.Call()
+	if fgThread != 0 && fgThread != me {
+		procAttachThreadInput.Call(me, fgThread, 1)
+		procBringWindowToTop.Call(h)
+		procSetForegroundWindow.Call(h)
+		procAttachThreadInput.Call(me, fgThread, 0)
+	}
+	if cur, _, _ := procGetForegroundWindow.Call(); cur == h {
+		return true
+	}
+	// last resort: at least show it above all other windows once
+	const (
+		hwndTopmost   = ^uintptr(0)     // -1
+		hwndNoTopmost = ^uintptr(0) - 1 // -2
+		swpNoMove     = 0x2
+		swpNoSize     = 0x1
+		swpShow       = 0x40
+	)
+	procSetWindowPos.Call(h, hwndTopmost, 0, 0, 0, 0, swpNoMove|swpNoSize|swpShow)
+	procSetWindowPos.Call(h, hwndNoTopmost, 0, 0, 0, 0, swpNoMove|swpNoSize|swpShow)
+	return false
+}
+
+// bringUIToFront waits for the UI window to appear and brings it to the front.
+func bringUIToFront(timeout time.Duration) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if h := findUIWindow(); h != 0 {
+			time.Sleep(150 * time.Millisecond) // let the window finish showing
+			forceForeground(h)
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// focusExistingUI brings an already open CraftKit window to the front; false if none is open.
+func focusExistingUI() bool {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if h := findUIWindow(); h != 0 {
+		forceForeground(h)
+		return true
+	}
+	return false
 }

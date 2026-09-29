@@ -63,3 +63,5 @@ func startLauncher() error {
 	}
 	return exec.Command(t).Start()
 }
+
+func focusExistingUI() bool { return false }
