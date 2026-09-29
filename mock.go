@@ -116,9 +116,17 @@ func (mockTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 		md := "# " + p[1] + "\\n\\n**Fett** und *kursiv* mit [Link](https://modrinth.com).\\n\\n- Punkt eins\\n- Punkt zwei\\n\\n<img src=x onerror=alert(1)><script>alert(2)</script><a href=\\\"javascript:alert(3)\\\">böser Link</a>\\n\\n```\\ncode\\n```"
 		body = fmt.Sprintf(`{"id":%q,"slug":%q,"title":%q,"description":%q,"icon_url":"","downloads":5,"project_type":"mod","loaders":["fabric"],"body":"%s","client_side":"required","server_side":"optional","license":{"id":"MIT"},"gallery":[{"url":"https://cdn.modrinth.com/x.png","title":"Screenshot"}]}`, id, p[0], p[1], p[2], md)
 	case strings.Contains(u, "api.modrinth.com/v2/version_files"):
-		// the test profile contains a jar whose sha1 is that of jar("sod1")
-		h := sha1.Sum(jar("sod1"))
-		body = fmt.Sprintf(`{%q:%s}`, hex.EncodeToString(h[:]), mrVersions["AANobbMI"])
+		// every mock jar is recognized by the sha1 of its content
+		var parts []string
+		for _, v := range mrVersions {
+			var mv struct {
+				ID string `json:"id"`
+			}
+			json.Unmarshal([]byte(v), &mv)
+			h := sha1.Sum(jar(mv.ID))
+			parts = append(parts, fmt.Sprintf(`%q:%s`, hex.EncodeToString(h[:]), v))
+		}
+		body = "{" + strings.Join(parts, ",") + "}"
 	case strings.Contains(u, "api.modrinth.com/v2/projects"):
 		var list []string
 		for id, p := range mrProjects {

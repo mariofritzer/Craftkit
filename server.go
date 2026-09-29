@@ -997,13 +997,28 @@ func registerRoutes(mux *http.ServeMux) {
 			writeErr(w, err)
 			return
 		}
-		name := r.URL.Query().Get("name")
-		j := startJob(L("Modpack importieren"), func(j *Job) (any, error) {
-			defer os.Remove(tmp)
-			return importModpack(j, tmp, ModpackRef{}, name)
-		})
-		writeJSON(w, map[string]string{"job": j.ID})
+		// the user picks what to import first (see /api/modpacks/inspect and /api/modpacks/import)
+		writeJSON(w, map[string]string{"key": rememberPack(tmp, r.URL.Query().Get("file"), ModpackRef{})})
 	})
+	mux.HandleFunc("/api/modpacks/inspect", api(func(r *http.Request) (any, error) {
+		return inspectPack(r.URL.Query().Get("key"))
+	}))
+	mux.HandleFunc("/api/modpacks/import", api(func(r *http.Request) (any, error) {
+		var req PackImportRequest
+		if err := readBody(r, &req); err != nil {
+			return nil, err
+		}
+		pp, ok := takePending(req.Key, true)
+		if !ok {
+			return nil, errNew("Die Modpack-Datei ist nicht mehr da – bitte noch einmal auswählen.")
+		}
+		req.All = false
+		j := startJob(L("Modpack importieren"), func(j *Job) (any, error) {
+			defer os.Remove(pp.file)
+			return importPack(j, pp.file, pp.ref, req)
+		})
+		return map[string]string{"job": j.ID}, nil
+	}))
 
 	// ---------- servers ----------
 	mux.HandleFunc("/api/server/ping", api(func(r *http.Request) (any, error) {

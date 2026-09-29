@@ -446,12 +446,131 @@ async function installPack(h, versionId, versionLabel) {
 
 async function uploadPack(file) {
   if (!/\.(mrpack|zip)$/i.test(file.name)) return toast(tr("Bitte eine .mrpack- oder .zip-Datei wählen."), true);
+  const md = modal(`<div class="modal-head"><h2>📦 ${esc(file.name)}</h2></div><div class="modal-body">${loading(tr("Lese Modpack …"))}</div>`, true);
   try {
-    const res = await fetch("/api/modpacks/upload?name=", { method: "POST", headers: { "X-CraftKit-Token": TOKEN, "X-CraftKit-Lang": LANG }, body: file });
+    const res = await fetch("/api/modpacks/upload?file=" + encodeURIComponent(file.name), { method: "POST", headers: { "X-CraftKit-Token": TOKEN, "X-CraftKit-Lang": LANG }, body: file });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || tr("Upload fehlgeschlagen"));
-    jobModal(data.job, tr("Modpack „{0}“ wird importiert", file.name), packDone);
-  } catch (e) { toast(e.message, true); }
+    const info = await api("/api/modpacks/inspect?key=" + encodeURIComponent(data.key));
+    closeModal(md);
+    packImportModal(info);
+  } catch (e) {
+    closeModal(md);
+    toast(e.message, true);
+  }
+}
+
+const PACK_GROUPS = {
+  get config() { return tr("Mod-Einstellungen und weitere Dateien"); },
+  get options() { return tr("Spieleinstellungen (Grafik, Tastenbelegung)"); },
+  get servers() { return tr("Server-Liste"); },
+  get saves() { return tr("Welten"); },
+};
+
+// packImportModal lets the user choose what to take from a modpack file and where to put it.
+function packImportModal(info) {
+  const entries = info.entries || [], groups = info.groups || [], targets = info.instances || [];
+  const byId = Object.fromEntries(entries.map(e => [e.id, e]));
+  const neededBy = {}; // id -> ids of entries that require it
+  entries.forEach(e => (e.requires || []).forEach(r => (neededBy[r] = neededBy[r] || []).push(e.id)));
+  const sel = new Set(entries.filter(e => !e.missing).map(e => e.id));
+  const gsel = new Set(groups.map(g => g.id));
+  const kinds = [["mod", tr("Mods")], ["resourcepack", tr("Ressourcenpakete")], ["shader", tr("Shader")], ["other", tr("Weitere Dateien")]];
+  const ld = `${loaderLabel(info.loader)}${info.loaderVersion ? " " + info.loaderVersion : ""}`;
+
+  const entryRow = e => `<label class="row plan-row pk-row" style="cursor:pointer" data-erow="${esc(e.id)}">
+      <input type="checkbox" data-e="${esc(e.id)}" ${sel.has(e.id) ? "checked" : ""} ${e.missing ? "disabled" : ""} style="accent-color:var(--green);width:16px;height:16px">
+      ${iconHTML(e.iconUrl, e.name)}
+      <div class="grow"><div class="row-title">${esc(e.name)}
+        ${e.manual ? `<span class="pill pill-gold" title="${esc(tr("Der Autor erlaubt keine Downloads über andere Programme."))}">${esc(tr("manueller Download"))}</span>` : ""}
+        ${e.missing ? `<span class="pill pill-red">${esc(tr("nicht gefunden"))}</span>` : ""}</div>
+        <div class="row-meta">${esc(e.file || "")}${e.size ? " · " + fmtSize(e.size) : ""}<span class="pk-need"></span></div></div></label>`;
+
+  const md = modal(`<div class="modal-head"><div style="flex:1;min-width:0"><h2>📦 ${esc(info.name || info.fileName)}${info.version ? ` <span class="muted" style="font-weight:500">${esc(info.version)}</span>` : ""}</h2>
+      ${info.summary ? `<div class="sub">${esc(info.summary)}</div>` : ""}
+      <div class="head-meta"><span class="pill">Minecraft ${esc(info.mcVersion)}</span><span class="pill">${esc(ld)}</span>
+        <span class="pill">${esc(info.format === "curseforge" ? "CurseForge" : "Modrinth")}</span></div></div></div>
+    <div class="modal-body">
+      <div class="section-label" style="margin-top:0">${esc(tr("Wohin?"))}</div>
+      <div class="card card-pad" style="display:grid;gap:10px">
+        <label class="check"><input type="radio" name="pkTo" value="" checked> ${esc(tr("Als neue Instanz"))}</label>
+        <input class="input" id="pkName" value="${esc([info.name, info.version].filter(Boolean).join(" ") || info.fileName)}" maxlength="60" style="margin-left:26px;width:calc(100% - 26px)">
+        <label class="check" ${targets.length ? "" : `style="opacity:.55"`}><input type="radio" name="pkTo" value="existing" ${targets.length ? "" : "disabled"}> ${esc(tr("Zu einer bestehenden Instanz hinzufügen"))}</label>
+        ${targets.length ? `<select class="input" id="pkTarget" style="margin-left:26px;width:calc(100% - 26px)" disabled>${targets.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join("")}</select>
+          <div class="muted" id="pkExistingHint" style="font-size:12.5px;margin-left:26px;display:none">${esc(tr("Ältere Versionen derselben Mods werden ersetzt, gleichnamige Einstellungsdateien überschrieben. Server werden zur Liste hinzugefügt. Die Mods lassen sich mit „Rückgängig“ wieder entfernen."))}</div>`
+          : `<div class="muted" style="font-size:12.5px;margin-left:26px">${esc(tr("Keine Instanz mit {0} vorhanden.", ld + " · Minecraft " + info.mcVersion))}</div>`}
+      </div>
+      ${kinds.map(([k, label]) => {
+        const list = entries.filter(e => e.kind === k);
+        return list.length ? `<div class="section-label" style="display:flex;gap:10px;align-items:center">${esc(label)} · <span data-kcount="${k}"></span>
+            <span class="spacer"></span><button class="linkish" data-kall="${k}">${esc(tr("Alle"))}</button><button class="linkish" data-knone="${k}">${esc(tr("Keine"))}</button></div>
+          <div class="card list" style="max-height:${k === "mod" ? 320 : 200}px;overflow:auto">${list.map(entryRow).join("")}</div>` : "";
+      }).join("")}
+      ${groups.length ? `<div class="section-label">${esc(tr("Weitere Inhalte"))}</div><div class="card card-pad" style="display:grid;gap:8px">
+        ${groups.map(g => `<label class="check"><input type="checkbox" data-g="${g.id}" checked> ${esc(PACK_GROUPS[g.id] || g.id)} <span class="muted">(${esc(tr("{0} Datei(en)", g.files))}${g.size ? ", " + fmtSize(g.size) : ""})</span></label>`).join("")}</div>` : ""}
+      ${info.skipped ? `<p class="muted" style="font-size:12.5px;margin-top:10px">${esc(tr("{0} reine Server-Dateien werden übersprungen.", info.skipped))}</p>` : ""}
+    </div>
+    <div class="modal-foot"><span class="muted" id="pkCount" style="font-size:12.5px"></span><span class="spacer"></span>
+      <button class="btn btn-ghost" data-close>${esc(tr("Abbrechen"))}</button><button class="btn btn-primary" id="pkGo">${esc(tr("Importieren"))}</button></div>`, true);
+
+  // an entry can't be deselected while a selected entry needs it
+  const refresh = () => {
+    entries.forEach(e => {
+      const box = $(`[data-e="${CSS.escape(e.id)}"]`, md);
+      if (!box) return;
+      const needers = (neededBy[e.id] || []).filter(id => sel.has(id));
+      box.checked = sel.has(e.id);
+      box.disabled = !!e.missing || (needers.length > 0 && sel.has(e.id));
+      $(".pk-need", box.closest("[data-erow]")).textContent = needers.length ? " · " + tr("benötigt von {0}", needers.map(id => byId[id].name).join(", ")) : "";
+    });
+    kinds.forEach(([k]) => {
+      const c = $(`[data-kcount="${k}"]`, md);
+      if (c) c.textContent = tr("{0} von {1}", entries.filter(e => e.kind === k && sel.has(e.id)).length, entries.filter(e => e.kind === k).length);
+    });
+    $("#pkCount", md).textContent = tr("{0} von {1} ausgewählt", sel.size, entries.length);
+    $("#pkGo", md).disabled = !sel.size && !gsel.size;
+  };
+  const select = (id, on) => {
+    const e = byId[id];
+    if (!e || e.missing) return;
+    if (on) { if (sel.has(id)) return; sel.add(id); (e.requires || []).forEach(r => select(r, true)); }
+    else if (!(neededBy[id] || []).some(x => sel.has(x))) sel.delete(id);
+  };
+  $$("[data-e]", md).forEach(b => b.onchange = () => { select(b.dataset.e, b.checked); refresh(); });
+  $$("[data-kall]", md).forEach(b => b.onclick = e => { e.preventDefault(); entries.filter(x => x.kind === b.dataset.kall).forEach(x => select(x.id, true)); refresh(); });
+  $$("[data-knone]", md).forEach(b => b.onclick = e => {
+    e.preventDefault();
+    const list = entries.filter(x => x.kind === b.dataset.knone);
+    for (let i = 0; i < list.length; i++) list.forEach(x => select(x.id, false)); // repeat so dependency chains clear
+    refresh();
+  });
+  $$("[data-g]", md).forEach(b => b.onchange = () => { b.checked ? gsel.add(b.dataset.g) : gsel.delete(b.dataset.g); refresh(); });
+  $$('[name="pkTo"]', md).forEach(r => r.onchange = () => {
+    const ex = $('[name="pkTo"]:checked', md).value === "existing";
+    $("#pkName", md).disabled = ex;
+    if ($("#pkTarget", md)) $("#pkTarget", md).disabled = !ex;
+    if ($("#pkExistingHint", md)) $("#pkExistingHint", md).style.display = ex ? "" : "none";
+    const opt = $('[data-g="options"]', md); // don't overwrite the player's own settings by default
+    if (opt) { opt.checked = !ex; opt.onchange(); }
+    $("#pkGo", md).textContent = ex ? tr("Hinzufügen") : tr("Importieren");
+  });
+  refresh();
+
+  $("#pkGo", md).onclick = async () => {
+    const ex = $('[name="pkTo"]:checked', md).value === "existing";
+    const targetId = ex ? $("#pkTarget", md).value : "";
+    const targetName = ex ? targets.find(t => t.id === targetId)?.name : $("#pkName", md).value;
+    try {
+      const { job } = await api("/api/modpacks/import", { key: info.key, name: ex ? "" : $("#pkName", md).value, targetId, entries: [...sel], groups: [...gsel] });
+      closeModal(md);
+      jobModal(job, ex ? tr("Inhalte werden zu „{0}“ hinzugefügt", targetName) : tr("Modpack „{0}“ wird importiert", targetName), async res => {
+        if (!ex) return packDone(res);
+        await refreshState();
+        go({ type: "instance", id: targetId });
+        toast(tr("Zu „{0}“ hinzugefügt.", targetName));
+      });
+    } catch (e) { toast(e.message, true); }
+  };
 }
 
 async function packDone(res) {
@@ -709,7 +828,8 @@ function timeAgo(iso) {
 function fmtSize(b) {
   if (!b) return "0 MB";
   if (b >= 1 << 30) return (b / (1 << 30)).toLocaleString(locale(), { maximumFractionDigits: 1 }) + " GB";
-  return Math.max(1, Math.round(b / (1 << 20))) + " MB";
+  if (b < 1 << 20) return Math.max(1, Math.round(b / 1024)) + " KB";
+  return (b / (1 << 20)).toLocaleString(locale(), { maximumFractionDigits: b < 10 << 20 ? 1 : 0 }) + " MB";
 }
 
 // ---------- mod sets ----------
