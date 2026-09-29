@@ -172,6 +172,7 @@ function renderSidebar() {
   $$("[data-inst]").forEach(b => b.onclick = () => go({ type: "instance", id: b.dataset.inst }));
   $$("[data-pf]").forEach(b => b.onclick = () => go({ type: "plugins", id: b.dataset.pf }));
   $("#btnSettings").classList.toggle("active", v.type === "settings");
+  $("#btnImportPack").classList.toggle("active", v.type === "new" && v.mode === "pack");
 }
 
 function updBadge(key) {
@@ -217,7 +218,7 @@ function renderWelcome(m) {
       <p>${esc(tr("CraftKit installiert Minecraft-Versionen mit Forge, NeoForge, Fabric oder Quilt, lädt Mods und Plugins von Modrinth und CurseForge und nimmt alle Voraussetzungen automatisch mit. Gespielt wird wie gewohnt im offiziellen Launcher."))}</p>
       <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
         <button class="btn btn-primary" id="wNew">+ ${esc(tr("Neue Instanz anlegen"))}</button>
-        <button class="btn" id="wPack">📦 ${esc(tr("Modpack installieren"))}</button>
+        <button class="btn" id="wPack">📦 ${esc(tr("Modpack importieren"))}</button>
         <button class="btn" id="wSrv">🌐 ${esc(tr("Für einen Server einrichten"))}</button>
         <button class="btn" id="wPf">${esc(tr("Plugin-Ordner hinzufügen"))}</button>
       </div>
@@ -358,7 +359,7 @@ async function createInstanceClicked() {
 function newTabs(active) {
   setTimeout(() => $$("[data-newtab]").forEach(b => b.onclick = () => go({ type: "new", mode: b.dataset.newtab })), 0);
   return `<div class="tabs"><button class="tab ${active === "new" ? "active" : ""}" data-newtab="new">${esc(tr("Selbst zusammenstellen"))}</button>
-    <button class="tab ${active === "pack" ? "active" : ""}" data-newtab="pack">📦 ${esc(tr("Modpack"))}</button></div>`;
+    <button class="tab ${active === "pack" ? "active" : ""}" data-newtab="pack">📦 ${esc(tr("Modpack importieren"))}</button></div>`;
 }
 
 // ---------- modpacks ----------
@@ -2044,6 +2045,7 @@ async function openLauncher() {
 // ---------- boot ----------
 $("#btnLauncher").onclick = openLauncher;
 $("#btnNewInstance").onclick = () => go({ type: "new" });
+$("#btnImportPack").onclick = () => go({ type: "new", mode: "pack" });
 $("#btnNewPluginFolder").onclick = () => go({ type: "newPlugins" });
 $("#btnSettings").onclick = () => go({ type: "settings" });
 setInterval(() => refreshState().catch(() => {}), 30000);
