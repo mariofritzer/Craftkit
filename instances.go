@@ -48,6 +48,7 @@ type Instance struct {
 	ProfileKey    string                    `json:"profileKey,omitempty"` // set for profiles taken over from the launcher
 	Adopted       bool                      `json:"adopted,omitempty"`
 	ServerAddress string                    `json:"serverAddress,omitempty"`
+	Modpack       *ModpackRef               `json:"modpack,omitempty"`
 	Dir           string                    `json:"dir"`
 }
 

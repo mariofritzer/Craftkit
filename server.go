@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -41,6 +42,7 @@ func logf(format string, a ...any) {
 func main() {
 	noWindow := flag.Bool("no-window", false, "UI nicht automatisch öffnen")
 	port := flag.Int("port", preferredPort, "Port")
+	afterUpdate := flag.Bool("after-update", false, "nach einem Update gestartet")
 	flag.Parse()
 
 	os.MkdirAll(dataDir(), 0o755)
@@ -53,7 +55,13 @@ func main() {
 	loadConfig()
 	logf("CraftKit %s startet, Daten: %s", appVersion, dataDir())
 
+	go cleanupOldExe()
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
+	// after an update the old process still holds the port for a moment – wait for it
+	for i := 0; err != nil && *afterUpdate && i < 40; i++ {
+		time.Sleep(250 * time.Millisecond)
+		ln, err = net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
+	}
 	if err != nil {
 		// already running? then just show its window
 		addr := fmt.Sprintf("http://127.0.0.1:%d", *port)
@@ -82,7 +90,10 @@ func main() {
 	registerRoutes(mux)
 	srv := &http.Server{Handler: guard(mux), ReadHeaderTimeout: 10 * time.Second}
 
-	if !*noWindow {
+	if *afterUpdate {
+		// the open window reconnects by itself
+		go watchdog()
+	} else if !*noWindow {
 		go func() {
 			time.Sleep(200 * time.Millisecond)
 			if err := openAppWindow(url); err != nil {
@@ -678,6 +689,83 @@ func registerRoutes(mux *http.ServeMux) {
 		}
 		return out, nil
 	}))
+
+	// ---------- self update ----------
+	mux.HandleFunc("/api/update/check", api(func(r *http.Request) (any, error) {
+		return checkUpdate()
+	}))
+	mux.HandleFunc("/api/update/apply", api(func(r *http.Request) (any, error) {
+		j := startJob("CraftKit aktualisieren", applyUpdate)
+		return map[string]string{"job": j.ID}, nil
+	}))
+
+	// ---------- modpacks ----------
+	mux.HandleFunc("/api/modpacks/search", api(func(r *http.Request) (any, error) {
+		q := r.URL.Query()
+		p, err := providerFor(q.Get("source"))
+		if err != nil {
+			return nil, err
+		}
+		off, _ := strconv.Atoi(q.Get("offset"))
+		hits, total, err := p.Search(SearchQuery{Query: strings.TrimSpace(q.Get("q")), Kind: "modpack", Offset: off, Limit: 20})
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"hits": hits, "total": total}, nil
+	}))
+	mux.HandleFunc("/api/modpacks/versions", api(func(r *http.Request) (any, error) {
+		q := r.URL.Query()
+		p, err := providerFor(q.Get("source"))
+		if err != nil {
+			return nil, err
+		}
+		vs, err := p.Versions(q.Get("project"), "modpack", "", nil)
+		if len(vs) > 40 {
+			vs = vs[:40]
+		}
+		return vs, err
+	}))
+	mux.HandleFunc("/api/modpacks/install", api(func(r *http.Request) (any, error) {
+		var req struct {
+			Source    string `json:"source"`
+			ProjectID string `json:"projectId"`
+			VersionID string `json:"versionId"`
+			Name      string `json:"name"`
+		}
+		if err := readBody(r, &req); err != nil {
+			return nil, err
+		}
+		j := startJob("Modpack installieren", func(j *Job) (any, error) {
+			return installModpackFromSource(j, req.Source, req.ProjectID, req.VersionID, req.Name)
+		})
+		return map[string]string{"job": j.ID}, nil
+	}))
+	mux.HandleFunc("/api/modpacks/upload", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			http.Error(w, "POST", 405)
+			return
+		}
+		tmp := filepath.Join(dataDir(), "tmp", fmt.Sprintf("upload-%d.zip", time.Now().UnixNano()))
+		os.MkdirAll(filepath.Dir(tmp), 0o755)
+		f, err := os.Create(tmp)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		_, err = io.Copy(f, io.LimitReader(r.Body, 4<<30))
+		f.Close()
+		if err != nil {
+			os.Remove(tmp)
+			writeErr(w, err)
+			return
+		}
+		name := r.URL.Query().Get("name")
+		j := startJob("Modpack importieren", func(j *Job) (any, error) {
+			defer os.Remove(tmp)
+			return importModpack(j, tmp, ModpackRef{}, name)
+		})
+		writeJSON(w, map[string]string{"job": j.ID})
+	})
 
 	// ---------- servers ----------
 	mux.HandleFunc("/api/server/ping", api(func(r *http.Request) (any, error) {

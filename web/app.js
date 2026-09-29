@@ -92,8 +92,10 @@ function renderTopStatus() {
   const st = S.state;
   const parts = [];
   if (st.launcherRunning) parts.push(`<span class="pill pill-gold" title="Neue Profile erscheinen erst nach einem Neustart des Launchers"><span class="dot"></span>Launcher läuft</span>`);
+  if (S.update?.available) parts.push(`<button class="pill pill-green" id="updPill" style="border:none;cursor:pointer" title="Update installieren">⬆ Update ${esc(S.update.latest)}</button>`);
   if (!st.launcherLabel) parts.push(`<span class="pill pill-red" title="Pfad in den Einstellungen angeben"><span class="dot"></span>Launcher nicht gefunden</span>`);
   $("#topStatus").innerHTML = parts.join("");
+  if ($("#updPill")) $("#updPill").onclick = updateModal;
 }
 
 function renderSidebar() {
@@ -165,6 +167,7 @@ function renderWelcome(m) {
       <p>CraftKit installiert Minecraft-Versionen mit Forge, NeoForge, Fabric oder Quilt, lädt Mods und Plugins von Modrinth und CurseForge und nimmt alle Voraussetzungen automatisch mit. Gespielt wird wie gewohnt im offiziellen Launcher.</p>
       <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
         <button class="btn btn-primary" id="wNew">+ Neue Instanz anlegen</button>
+        <button class="btn" id="wPack">📦 Modpack installieren</button>
         <button class="btn" id="wSrv">🌐 Für einen Server einrichten</button>
         <button class="btn" id="wPf">Plugin-Ordner hinzufügen</button>
       </div>
@@ -177,16 +180,19 @@ function renderWelcome(m) {
   $("#wNew").onclick = () => go({ type: "new" });
   $("#wPf").onclick = () => go({ type: "newPlugins" });
   $("#wSrv").onclick = () => serverModal(null);
+  $("#wPack").onclick = () => go({ type: "new", mode: "pack" });
 }
 
 // ---------- new instance wizard ----------
 const W = { loader: "fabric", mc: "", lv: "", name: "", memory: 4, snapshots: false, mcList: null, lvList: null, err: "" };
 
 async function renderNewInstance(m) {
+  if (S.view.mode === "pack") return renderModpacks(m);
   W.snapshots = S.state.config.showSnapshots;
   m.innerHTML = `<div class="main-inner">
     <div class="page-head"><div class="grow"><h1>Neue Instanz</h1>
       <div class="sub">Jede Instanz hat einen eigenen Ordner für Mods, Welten und Einstellungen und erscheint als eigenes Profil im Minecraft Launcher.</div></div></div>
+    ${newTabs("new")}
     ${S.state.launcherRunning ? `<div class="banner banner-warn"><span class="b-ico">⚠</span><div>Der Minecraft Launcher ist gerade offen. Schließ ihn am besten vorher, sonst taucht das neue Profil erst nach einem Neustart des Launchers auf.</div></div>` : ""}
     <div class="step-title done"><span class="step-num">1</span>Loader</div>
     <div class="loader-grid" id="wLoaders"></div>
@@ -299,6 +305,112 @@ async function createInstanceClicked() {
   } catch (e) { toast(e.message, true); }
 }
 
+function newTabs(active) {
+  setTimeout(() => $$("[data-newtab]").forEach(b => b.onclick = () => go({ type: "new", mode: b.dataset.newtab })), 0);
+  return `<div class="tabs"><button class="tab ${active === "new" ? "active" : ""}" data-newtab="new">Selbst zusammenstellen</button>
+    <button class="tab ${active === "pack" ? "active" : ""}" data-newtab="pack">📦 Modpack</button></div>`;
+}
+
+// ---------- modpacks ----------
+let packSource = "modrinth";
+function renderModpacks(m) {
+  m.innerHTML = `<div class="main-inner">
+    <div class="page-head"><div class="grow"><h1>Neue Instanz</h1>
+      <div class="sub">Ein Modpack bringt Loader, Mods und Einstellungen fertig abgestimmt mit. CraftKit legt dafür eine eigene Instanz an.</div></div></div>
+    ${newTabs("pack")}
+    <div class="card card-pad" id="dropZone" style="display:flex;align-items:center;gap:16px;border-style:dashed">
+      <div style="font-size:28px">📥</div>
+      <div class="grow" style="flex:1"><b>Modpack-Datei importieren</b><div class="muted" style="font-size:13px">.mrpack von Modrinth oder .zip von CurseForge – hierher ziehen oder auswählen.</div></div>
+      <input type="file" id="packFile" accept=".mrpack,.zip" class="hidden"><button class="btn" id="packPick">Datei wählen …</button>
+    </div>
+    <div class="section-label">Oder Modpack suchen</div>
+    <div class="searchbar">
+      <div class="seg">${Object.entries(SOURCES).map(([k, n]) => `<button data-psrc="${k}" class="${packSource === k ? "active" : ""}">${n}</button>`).join("")}</div>
+      <input class="input search-input" id="pq" placeholder="z. B. Fabulously Optimized, All the Mods, Create …" autocomplete="off">
+    </div>
+    <div id="packResults"></div></div>`;
+  const file = $("#packFile");
+  $("#packPick").onclick = () => file.click();
+  file.onchange = () => file.files[0] && uploadPack(file.files[0]);
+  const dz = $("#dropZone");
+  dz.ondragover = e => { e.preventDefault(); dz.style.borderColor = "var(--green)"; };
+  dz.ondragleave = () => { dz.style.borderColor = ""; };
+  dz.ondrop = e => { e.preventDefault(); dz.style.borderColor = ""; const f = e.dataTransfer.files[0]; if (f) uploadPack(f); };
+  $$("[data-psrc]").forEach(b => b.onclick = () => { packSource = b.dataset.psrc; $$("[data-psrc]").forEach(x => x.classList.toggle("active", x === b)); searchPacks($("#pq").value, 0); });
+  let timer;
+  $("#pq").oninput = () => { clearTimeout(timer); timer = setTimeout(() => searchPacks($("#pq").value, 0), 350); };
+  searchPacks("", 0);
+}
+
+let packSeq = 0;
+async function searchPacks(q, offset) {
+  const seq = ++packSeq, box = $("#packResults");
+  if (!box) return;
+  if (offset === 0) box.innerHTML = loading("Suche …");
+  let res;
+  try { res = await api(`/api/modpacks/search?source=${packSource}&q=${encodeURIComponent(q)}&offset=${offset}`); }
+  catch (e) {
+    if (seq !== packSeq) return;
+    box.innerHTML = `<div class="banner banner-err"><span class="b-ico">✕</span><div>${esc(e.message)}</div></div>`;
+    return;
+  }
+  if (seq !== packSeq) return;
+  const hits = res.hits || [];
+  if (offset === 0 && !hits.length) { box.innerHTML = `<div class="card empty">Nichts gefunden.</div>`; return; }
+  if (offset === 0) box.innerHTML = `<div class="results" id="packGrid"></div><div id="packMore" style="text-align:center;margin-top:14px"></div>`;
+  const grid = $("#packGrid");
+  hits.forEach(h => {
+    grid.insertAdjacentHTML("beforeend", `<div class="result" data-pack="${esc(h.id)}">${iconHTML(h.iconUrl, h.name)}<div class="grow">
+      <div class="result-title">${esc(h.name)}</div><div class="result-sum">${esc(h.summary)}</div>
+      <div class="result-foot"><span>⬇ ${fmtNum(h.downloads)}</span>${h.author ? `<span>· ${esc(h.author)}</span>` : ""}<span class="spacer"></span>
+        <button class="linkish" data-pver>Version</button>${h.pageUrl ? `<a class="linkish" href="${esc(h.pageUrl)}" data-ext>Seite</a>` : ""}
+        <button class="btn btn-sm btn-primary" data-pinst>Installieren</button></div></div></div>`);
+    const card = grid.lastElementChild;
+    $("[data-pinst]", card).onclick = () => installPack(h, "", "");
+    $("[data-pver]", card).onclick = () => packVersionPicker(h);
+  });
+  const shown = $$(".result", grid).length;
+  $("#packMore").innerHTML = shown < res.total ? `<button class="btn" id="pMoreBtn">Mehr laden</button>` : "";
+  if ($("#pMoreBtn")) $("#pMoreBtn").onclick = () => searchPacks(q, shown);
+}
+
+async function packVersionPicker(h) {
+  const md = modal(`<div class="modal-head"><h2>Version von ${esc(h.name)}</h2></div><div class="modal-body" id="pvBody">${loading()}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Abbrechen</button></div>`);
+  try {
+    const list = await api(`/api/modpacks/versions?source=${h.source}&project=${encodeURIComponent(h.id)}`);
+    $("#pvBody", md).innerHTML = (list || []).length ? `<div class="card list">${list.map((v, i) => `<div class="row" style="cursor:pointer" data-pv="${i}"><div class="grow">
+      <div class="row-title"><span class="mono">${esc(v.number)}</span>${v.type !== "release" ? `<span class="pill pill-gold">${esc(v.type)}</span>` : ""}</div>
+      <div class="row-meta">${fmtDate(v.date)} · Minecraft ${esc((v.gameVersions || []).join(", "))}${(v.loaders || []).length ? " · " + esc(v.loaders.join(", ")) : ""}</div></div></div>`).join("")}</div>` : `<div class="empty">Keine Versionen gefunden.</div>`;
+    $$("[data-pv]", md).forEach(r => r.onclick = () => { closeModal(md); installPack(h, list[+r.dataset.pv].id, list[+r.dataset.pv].number); });
+  } catch (e) { $("#pvBody", md).innerHTML = `<div class="banner banner-err"><span class="b-ico">✕</span><div>${esc(e.message)}</div></div>`; }
+}
+
+async function installPack(h, versionId, versionLabel) {
+  try {
+    const { job } = await api("/api/modpacks/install", { source: h.source, projectId: h.id, versionId });
+    jobModal(job, `Modpack „${h.name}“${versionLabel ? " " + versionLabel : ""} wird installiert`, packDone);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function uploadPack(file) {
+  if (!/\.(mrpack|zip)$/i.test(file.name)) return toast("Bitte eine .mrpack- oder .zip-Datei wählen.", true);
+  try {
+    const res = await fetch("/api/modpacks/upload?name=", { method: "POST", headers: { "X-CraftKit-Token": TOKEN }, body: file });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Upload fehlgeschlagen");
+    jobModal(data.job, `Modpack „${file.name}“ wird importiert`, packDone);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function packDone(res) {
+  await refreshState();
+  if (res?.instance?.id) {
+    go({ type: "instance", id: res.instance.id });
+    toast("Modpack installiert – das Profil heißt im Launcher „" + res.instance.name + " (CraftKit)“.");
+  }
+}
+
 // ---------- plugin folder ----------
 async function renderNewPluginFolder(m, edit) {
   const pf = edit || { name: "", path: "", platform: "paper", mcVersion: "" };
@@ -368,7 +480,7 @@ async function renderTarget(m, type, id, tab) {
 
   const headIco = inst ? `<div class="head-ico ld-${esc(inst.loader)}">${LOADERS[inst.loader].ico}</div>` : `<div class="head-ico ld-plugin">🔌</div>`;
   const meta = inst
-    ? `<span class="pill">${esc(LOADERS[inst.loader].name)} ${esc(inst.loaderVersion)}</span><span class="pill">Minecraft ${esc(inst.mcVersion)}</span>${inst.memoryGB ? `<span class="pill">${inst.memoryGB} GB RAM</span>` : ""}<span class="pill pill-green" title="Name im offiziellen Launcher"><span class="dot"></span>Profil: ${esc(inst.name)}${inst.adopted ? "" : " (CraftKit)"}</span>`
+    ? `<span class="pill">${esc(LOADERS[inst.loader].name)} ${esc(inst.loaderVersion)}</span><span class="pill">Minecraft ${esc(inst.mcVersion)}</span>${inst.memoryGB ? `<span class="pill">${inst.memoryGB} GB RAM</span>` : ""}<span class="pill pill-green" title="Name im offiziellen Launcher"><span class="dot"></span>Profil: ${esc(inst.name)}${inst.adopted ? "" : " (CraftKit)"}</span>${inst.modpack ? `<span class="pill pill-blue" title="Aus Modpack installiert">📦 ${esc(inst.modpack.name)} ${esc(inst.modpack.version || "")}</span>` : ""}`
     + (inst.serverAddress ? `<span class="pill" id="srvPill" style="cursor:pointer" title="Server prüfen">🌐 ${esc(inst.serverAddress)} <span class="spinner" style="width:11px;height:11px;border-width:2px"></span></span>` : "")
     : `<span class="pill">${esc(PLATFORMS[pf?.platform] || pf?.platform)}</span><span class="pill">Minecraft ${esc(pf?.mcVersion || "beliebig")}</span>${pf && !pf.exists ? `<span class="pill pill-red">Ordner fehlt</span>` : ""}`;
 
@@ -779,12 +891,14 @@ function jobModal(jobId, title, onDone, folder) {
     let html = "";
     if (j.status === "error") html += `<div class="banner banner-err"><span class="b-ico">✕</span><div>${esc(j.error)}</div></div>`;
     if ((r.failed || []).length) html += `<div class="banner banner-err"><span class="b-ico">✕</span><div>Fehlgeschlagen: ${esc(r.failed.join(" · "))}</div></div>`;
-    if ((r.manual || []).length) html += `<div class="banner banner-warn"><span class="b-ico">⚠</span><div>Bitte manuell herunterladen und in den Ordner legen:<br>${r.manual.map(m => `<a href="${esc(m.version.file.manualUrl)}" data-ext>${esc(m.name)} (${esc(m.version.file.fileName)})</a>`).join("<br>")}</div></div>`;
+    if ((r.manual || []).length) html += `<div class="banner banner-warn"><span class="b-ico">⚠</span><div>Diese Dateien erlauben keinen Download über andere Programme. Bitte auf der Website herunterladen und in den angegebenen Ordner legen:<br>${r.manual.map(m => `<a href="${esc(m.url || m.version?.file?.manualUrl)}" data-ext>${esc(m.name)} (${esc(m.fileName || m.version?.file?.fileName)})</a>${m.folder ? ` <span class="muted mono" style="font-size:11.5px">→ ${esc(m.folder)}</span>` : ""}`).join("<br>")}</div></div>`;
+    if (r.files && !r.installed) html += `<div class="banner banner-info"><span class="b-ico">✓</span><div>${r.files - (r.failed || []).length - (r.manual || []).length} Dateien installiert${r.skipped ? `, ${r.skipped} reine Server-Dateien übersprungen` : ""}${r.identify ? ` · ${(r.identify.recognized || []).length} Mods für Updates erkannt` : ""}.</div></div>`;
     if (j.status === "done" && (r.installed || r.updated)) {
       const n = (r.installed || []).length, u = (r.updated || []).length;
       html += `<div class="banner banner-info"><span class="b-ico">✓</span><div>${n ? n + " installiert" : ""}${n && u ? ", " : ""}${u ? u + " aktualisiert" : ""}${!n && !u ? "Nichts geändert" : ""}.</div></div>`;
     }
     $("#jResult", md).innerHTML = html;
+    if (!folder && r.instance?.dir) folder = r.instance.dir;
     $("#jFoot", md).innerHTML = `${folder || r.dir ? `<button class="btn" id="jFolder">📁 Ordner öffnen</button>` : ""}<span class="spacer"></span>
       ${j.status === "done" ? `<button class="btn btn-play btn-sm" id="jLaunch" style="height:36px">▶ Minecraft Launcher öffnen</button>` : ""}
       <button class="btn btn-primary" data-close>Schließen</button>`;
@@ -1129,7 +1243,8 @@ async function checkServerPill(inst) {
 function renderSettings(m) {
   const c = S.state.config;
   m.innerHTML = `<div class="main-inner">
-    <div class="page-head"><div class="grow"><h1>Einstellungen</h1><div class="sub">CraftKit ${esc(S.state.version)} · Daten in <span class="mono">${esc(S.state.dataDir)}</span></div></div></div>
+    <div class="page-head"><div class="grow"><h1>Einstellungen</h1><div class="sub">CraftKit ${esc(S.state.version)} · Daten in <span class="mono">${esc(S.state.dataDir)}</span></div></div>
+      <div class="actions"><button class="btn btn-sm" id="chkUpd">Nach Updates suchen</button></div></div>
     <div class="card card-pad"><div class="form-grid">
       <div class="field" style="grid-column:1/-1"><label>CurseForge-API-Key</label><input class="input mono" id="cfKey" type="password" value="${esc(c.curseforgeKey)}" autocomplete="off">
         <span class="hint">Nötig für Suche und Downloads über CurseForge. Einen eigenen Key gibt es kostenlos auf <a href="https://console.curseforge.com/" data-ext>console.curseforge.com</a>.</span></div>
@@ -1144,6 +1259,7 @@ function renderSettings(m) {
       <label class="check"><input type="checkbox" id="snap" ${c.showSnapshots ? "checked" : ""}> Snapshots standardmäßig anzeigen</label>
     </div>
     <div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn btn-primary" id="cSave">Speichern</button></div></div></div>`;
+  $("#chkUpd").onclick = () => checkForUpdate(true);
   $$("[data-pick]").forEach(b => b.onclick = async () => {
     try { const r = await api("/api/pick-folder", { title: "Ordner wählen" }); if (r.path) $("#" + b.dataset.pick).value = r.path; }
     catch (e) { toast(e.message, true); }
@@ -1157,6 +1273,59 @@ function renderSettings(m) {
       renderSettings(m);
     } catch (e) { toast(e.message, true); }
   };
+}
+
+// ---------- self update ----------
+async function checkForUpdate(manual = false) {
+  let u;
+  try { u = await api("/api/update/check"); }
+  catch (e) { if (manual) toast("Update-Prüfung fehlgeschlagen: " + e.message, true); return; }
+  S.update = u;
+  renderTopStatus();
+  if (manual) {
+    if (u.available) updateModal();
+    else toast(u.current === "dev" ? "Entwicklerversion – keine Update-Prüfung." : `CraftKit ${u.current} ist aktuell.`);
+  }
+}
+
+function updateModal() {
+  const u = S.update;
+  const md = modal(`<div class="modal-head"><div style="flex:1"><h2>⬆ CraftKit ${esc(u.latest)} ist verfügbar</h2>
+      <div class="sub">Du hast Version ${esc(u.current)}. Das Update wird heruntergeladen, geprüft und CraftKit startet neu – deine Instanzen und Einstellungen bleiben erhalten.</div></div></div>
+    <div class="modal-body">${u.notes ? `<div class="section-label" style="margin-top:0">Was ist neu</div><div class="card card-pad" style="white-space:pre-wrap;font-size:13px;max-height:260px;overflow:auto">${esc(u.notes)}</div>` : ""}
+      ${u.url ? `<div style="margin-top:10px"><a href="${esc(u.url)}" data-ext>Auf GitHub ansehen</a></div>` : ""}</div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Später</button><button class="btn btn-primary" id="upGo">Jetzt aktualisieren</button></div>`);
+  $("#upGo", md).onclick = async () => {
+    if (anyRunning()) return toast("Bitte warte, bis die laufende Installation fertig ist.", true);
+    try {
+      const { job } = await api("/api/update/apply", {});
+      closeModal(md);
+      jobModal(job, `CraftKit ${u.latest} wird installiert`, async () => { restartWait(); });
+    } catch (e) { toast(e.message, true); }
+  };
+}
+
+function anyRunning() { return !!$(".progress.indet") || false; }
+
+function restartWait() {
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `<div class="modal" style="width:min(420px,100%)"><div class="modal-body" style="padding:28px;text-align:center">
+    <div class="spinner" style="width:28px;height:28px"></div><h2 style="margin:14px 0 4px">CraftKit startet neu …</h2><div class="muted">Einen Moment, das Fenster lädt gleich neu.</div></div></div>`;
+  $$("#modalRoot .modal-back").forEach(x => x.remove());
+  $("#modalRoot").appendChild(back);
+  const started = Date.now();
+  const tryReload = async () => {
+    if (Date.now() - started > 3000) {
+      try {
+        const r = await fetch("/api/hello", { cache: "no-store" });
+        if (r.ok) { location.reload(); return; }
+      } catch {}
+    }
+    if (Date.now() - started > 60000) { back.querySelector(".muted").textContent = "Bitte CraftKit neu öffnen."; return; }
+    setTimeout(tryReload, 1000);
+  };
+  setTimeout(tryReload, 1000);
 }
 
 // ---------- launcher ----------
@@ -1173,6 +1342,6 @@ $("#btnNewInstance").onclick = () => go({ type: "new" });
 $("#btnNewPluginFolder").onclick = () => go({ type: "newPlugins" });
 $("#btnSettings").onclick = () => go({ type: "settings" });
 setInterval(() => refreshState().catch(() => {}), 30000);
-refreshState().then(() => go({ type: "welcome" })).catch(e => {
+refreshState().then(() => { go({ type: "welcome" }); checkForUpdate(false); }).catch(e => {
   $("#main").innerHTML = `<div class="main-inner"><div class="banner banner-err"><span class="b-ico">✕</span><div>${esc(e.message)}</div></div></div>`;
 });

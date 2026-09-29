@@ -13,6 +13,7 @@ const curseforgeAPI = "https://api.curseforge.com/v1"
 const cfGameMinecraft = 432
 const cfClassMods = 6
 const cfClassBukkitPlugins = 5
+const cfClassModpacks = 4471
 
 type curseforge struct{ key string }
 
@@ -64,7 +65,9 @@ func (m cfMod) toProject() Project {
 func (c curseforge) Search(q SearchQuery) ([]Project, int, error) {
 	v := url.Values{}
 	v.Set("gameId", strconv.Itoa(cfGameMinecraft))
-	if q.Kind == "plugin" {
+	if q.Kind == "modpack" {
+		v.Set("classId", strconv.Itoa(cfClassModpacks))
+	} else if q.Kind == "plugin" {
 		v.Set("classId", strconv.Itoa(cfClassBukkitPlugins))
 	} else {
 		v.Set("classId", strconv.Itoa(cfClassMods))
@@ -82,7 +85,7 @@ func (c curseforge) Search(q SearchQuery) ([]Project, int, error) {
 	if q.Query != "" {
 		v.Set("searchFilter", q.Query)
 	}
-	if q.MCVersion != "" && q.Kind != "plugin" {
+	if q.MCVersion != "" && q.Kind == "mod" {
 		v.Set("gameVersion", q.MCVersion)
 	}
 	v.Set("sortField", "2") // popularity
@@ -228,7 +231,13 @@ func (c curseforge) Versions(projectID, kind, mc string, loaders []string) ([]Mo
 		}
 	}
 	note := ""
-	if kind == "plugin" {
+	if kind == "modpack" {
+		fs, err := c.filesPage(projectID, "", 0)
+		if err != nil {
+			return nil, err
+		}
+		add(fs)
+	} else if kind == "plugin" {
 		fs, err := c.filesPage(projectID, mc, 0)
 		if err != nil {
 			return nil, err

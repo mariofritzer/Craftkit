@@ -29,8 +29,8 @@ type mrHit struct {
 
 func mrPage(kind, slug string) string {
 	t := "mod"
-	if kind == "plugin" {
-		t = "plugin"
+	if kind == "plugin" || kind == "modpack" {
+		t = kind
 	}
 	return "https://modrinth.com/" + t + "/" + slug
 }
@@ -51,7 +51,9 @@ func mustJSON(v any) string {
 
 func (modrinth) Search(q SearchQuery) ([]Project, int, error) {
 	var facets [][]string
-	if q.Kind == "plugin" {
+	if q.Kind == "modpack" {
+		facets = append(facets, []string{"project_type:modpack"})
+	} else if q.Kind == "plugin" {
 		facets = append(facets, []string{"project_type:plugin", "project_type:mod"})
 	} else {
 		facets = append(facets, []string{"project_type:mod"})
@@ -106,7 +108,9 @@ func (modrinth) Project(id string) (*Project, error) {
 		return nil, err
 	}
 	kind := "mod"
-	if containsAny(p.Loaders, []string{"paper", "spigot", "bukkit", "purpur", "folia", "velocity", "bungeecord", "waterfall"}) && !containsAny(p.Loaders, []string{"fabric", "forge", "neoforge", "quilt"}) {
+	if p.ProjectType == "modpack" {
+		kind = "modpack"
+	} else if containsAny(p.Loaders, []string{"paper", "spigot", "bukkit", "purpur", "folia", "velocity", "bungeecord", "waterfall"}) && !containsAny(p.Loaders, []string{"fabric", "forge", "neoforge", "quilt"}) {
 		kind = "plugin"
 	}
 	return &Project{Source: "modrinth", ID: p.ID, Slug: p.Slug, Name: p.Title, Summary: p.Description,
