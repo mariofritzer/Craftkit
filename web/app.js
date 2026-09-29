@@ -174,7 +174,7 @@ function renderWelcome(m) {
       <div class="feature-grid">
         <div class="feature"><b>1 · Version wählen</b><span>Loader und Minecraft-Version aussuchen, CraftKit installiert alles und legt ein eigenes Profil an.</span></div>
         <div class="feature"><b>2 · Mods aussuchen</b><span>Suchen, in den Korb legen, Abhängigkeiten werden vor der Installation angezeigt.</span></div>
-        <div class="feature"><b>3 · Spielen</b><span>„Minecraft Launcher öffnen“ drücken und das Profil mit „(CraftKit)“ im Namen starten.</span></div>
+        <div class="feature"><b>3 · Spielen</b><span>„Minecraft Launcher öffnen“ drücken und dort das Profil der Instanz starten – neue Instanzen erkennst du an „(CraftKit)“ im Namen, übernommene behalten ihren Namen.</span></div>
       </div>
     </div></div>`;
   $("#wNew").onclick = () => go({ type: "new" });
@@ -492,7 +492,7 @@ async function renderTarget(m, type, id, tab) {
         <button class="btn btn-sm" id="tFolder">📁 Ordner</button>
         <button class="btn btn-sm" id="tUpdate" ${items.length ? "" : "disabled"}>↻ Alle aktualisieren</button>
         <button class="btn btn-sm" id="tEdit">Bearbeiten</button>
-        <button class="btn btn-sm btn-danger" id="tDelete">${inst ? "Löschen" : "Entfernen"}</button>
+        <button class="btn btn-sm btn-danger" id="tDelete">${inst && !inst.adopted ? "Löschen" : "Entfernen"}</button>
       </div>
     </div>
     <div class="tabs">
@@ -518,7 +518,7 @@ async function renderTarget(m, type, id, tab) {
 function renderVanilla(m, inst) {
   m.innerHTML = `<div class="main-inner">
     <div class="page-head"><div class="head-ico ld-vanilla">🌱</div>
-      <div class="grow"><h1>${esc(inst.name)}</h1><div class="head-meta"><span class="pill">Vanilla</span><span class="pill">Minecraft ${esc(inst.mcVersion)}</span><span class="pill pill-green"><span class="dot"></span>Profil: ${esc(inst.name)} (CraftKit)</span></div></div>
+      <div class="grow"><h1>${esc(inst.name)}</h1><div class="head-meta"><span class="pill">Vanilla</span><span class="pill">Minecraft ${esc(inst.mcVersion)}</span><span class="pill pill-green"><span class="dot"></span>Profil: ${esc(inst.name)}${inst.adopted ? "" : " (CraftKit)"}</span></div></div>
       <div class="actions"><button class="btn btn-sm" id="vUp">⬆ Version wechseln</button><button class="btn btn-sm" id="vSrv">🌐 Server</button><button class="btn btn-sm" id="vEdit">Bearbeiten</button><button class="btn btn-sm btn-danger" id="vDel">Löschen</button></div></div>
     <div class="banner banner-info"><span class="b-ico">ℹ</span><div>Vanilla-Instanzen laden keine Mods. Wenn du Mods willst, leg eine neue Instanz mit Fabric, Forge, NeoForge oder Quilt an. Die Spieldateien lädt der Minecraft Launcher beim ersten Start.</div></div>
     <button class="btn btn-primary" id="vNew">+ Neue Instanz mit Mod-Loader</button></div>`;
@@ -969,6 +969,14 @@ function instanceSettingsModal(inst) {
 }
 
 function deleteInstanceModal(inst) {
+  if (inst.adopted) {
+    confirmModal("Aus CraftKit entfernen?", `<p>„${esc(inst.name)}“ wird nicht mehr von CraftKit verwaltet. Das Profil im Minecraft Launcher, deine Mods und Welten bleiben unverändert.</p>`, "Entfernen", async () => {
+      await api("/api/instances/delete", { id: inst.id, deleteFiles: false });
+      await refreshState();
+      go({ type: "welcome" });
+    });
+    return;
+  }
   confirmModal("Instanz löschen?", `<p>Das Profil „${esc(inst.name)} (CraftKit)“ wird aus dem Minecraft Launcher entfernt.</p>
     <label class="check"><input type="checkbox" id="dFiles"> Auch den Ordner mit Mods, Welten und Einstellungen löschen</label>
     <p class="muted" style="font-size:12.5px">Ohne Haken bleiben deine Welten erhalten.</p>`, "Löschen", async () => {
@@ -1333,9 +1341,13 @@ function restartWait() {
 
 // ---------- launcher ----------
 async function openLauncher() {
+  const instanceId = S.view.type === "instance" ? S.view.id : "";
   try {
-    await api("/api/open-launcher", {});
-    toast("Minecraft Launcher wird geöffnet – wähle dort das Profil mit „(CraftKit)“.");
+    const r = await api("/api/open-launcher", { instanceId });
+    if (r.profile) toast(`Minecraft Launcher wird geöffnet – wähle dort das Profil „${r.profile}“${r.movedToTop ? " (steht ganz oben)" : ""}.`);
+    else if ((r.profiles || []).length === 1) toast(`Minecraft Launcher wird geöffnet – dein CraftKit-Profil heißt „${r.profiles[0]}“.`);
+    else if ((r.profiles || []).length) toast(`Minecraft Launcher wird geöffnet. Deine CraftKit-Profile: ${r.profiles.map(n => "„" + n + "“").join(", ")}.`);
+    else toast("Minecraft Launcher wird geöffnet.");
   } catch (e) { toast("Launcher konnte nicht geöffnet werden: " + e.message, true); }
 }
 

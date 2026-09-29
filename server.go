@@ -583,7 +583,28 @@ func registerRoutes(mux *http.ServeMux) {
 		return map[string]string{"path": p}, err
 	}))
 	mux.HandleFunc("/api/open-launcher", api(func(r *http.Request) (any, error) {
-		return map[string]bool{"ok": true}, startLauncher()
+		var req struct {
+			InstanceID string `json:"instanceId"`
+		}
+		readBody(r, &req)
+		out := map[string]any{"ok": true}
+		var names []string
+		for _, in := range listInstances() {
+			names = append(names, launcherProfileName(in))
+		}
+		out["profiles"] = names
+		if req.InstanceID != "" {
+			if in, err := loadInstance(req.InstanceID); err == nil {
+				out["profile"] = launcherProfileName(in)
+				// only while the launcher is closed – a running launcher would overwrite the file
+				if !isProcessRunning("MinecraftLauncher.exe", "Minecraft.exe") {
+					if err := touchProfile(in); err == nil {
+						out["movedToTop"] = true
+					}
+				}
+			}
+		}
+		return out, startLauncher()
 	}))
 	mux.HandleFunc("/api/open-folder", api(func(r *http.Request) (any, error) {
 		var req struct {

@@ -612,3 +612,22 @@ func (it *InstalledItem) DiskName() string {
 	}
 	return it.FileName
 }
+
+// launcherProfileName is the name the instance has in the official launcher.
+func launcherProfileName(in *Instance) string {
+	if in.Adopted {
+		return in.Name
+	}
+	return in.Name + " (CraftKit)"
+}
+
+// touchProfile marks the profile as last used so the launcher lists it first.
+func touchProfile(in *Instance) error {
+	now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	return editProfiles(func(profiles map[string]any) error {
+		if p, ok := profiles[profileKey(in)].(map[string]any); ok {
+			p["lastUsed"] = now
+		}
+		return nil
+	})
+}
