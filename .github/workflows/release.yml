@@ -40,7 +40,7 @@ jobs:
       - name: Build CraftKit.exe
         run: |
           TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG#v}"
+          VERSION="${TAG#[vV]}"
           mkdir -p dist
           GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
             -ldflags "-H windowsgui -s -w -X main.appVersion=${VERSION}" \
