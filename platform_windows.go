@@ -125,6 +125,7 @@ func detectLauncher() (label, target string) {
 }
 
 func startLauncher() error {
+	go bringLauncherToFront(45 * time.Second)
 	_, target := detectLauncher()
 	if target == "" {
 		// last try: let Windows resolve the Store app, the user will see an error if missing
@@ -171,17 +172,16 @@ func windowText(h uintptr, proc *syscall.LazyProc) string {
 	return syscall.UTF16ToString(buf)
 }
 
-// findUIWindow looks for the visible Edge/Chrome app window showing CraftKit.
-func findUIWindow() uintptr {
+// findWindow returns the first visible top-level window matching title/class.
+func findWindow(match func(title, class string) bool) uintptr {
 	var found uintptr
 	cb := syscall.NewCallback(func(h, _ uintptr) uintptr {
 		if v, _, _ := procIsWindowVisible.Call(h); v == 0 {
-			return 1
+			if ic, _, _ := procIsIconic.Call(h); ic == 0 {
+				return 1
+			}
 		}
-		if windowText(h, procGetClassNameW) != "Chrome_WidgetWin_1" {
-			return 1
-		}
-		if t := windowText(h, procGetWindowTextW); t == appName || strings.HasPrefix(t, appName+" ") {
+		if match(windowText(h, procGetWindowTextW), windowText(h, procGetClassNameW)) {
 			found = h
 			return 0
 		}
@@ -189,6 +189,39 @@ func findUIWindow() uintptr {
 	})
 	procEnumWindows.Call(cb, 0)
 	return found
+}
+
+// findUIWindow looks for the Edge/Chrome app window showing CraftKit.
+func findUIWindow() uintptr {
+	return findWindow(func(t, class string) bool {
+		return class == "Chrome_WidgetWin_1" && (t == appName || strings.HasPrefix(t, appName+" "))
+	})
+}
+
+func isLauncherWindow(t, class string) bool {
+	return t == "Minecraft Launcher" || strings.HasPrefix(t, "Minecraft Launcher ")
+}
+
+// bringLauncherToFront waits for the official launcher window and brings it to the front.
+func bringLauncherToFront(timeout time.Duration) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if h := findWindow(isLauncherWindow); h != 0 {
+			time.Sleep(300 * time.Millisecond)
+			forceForeground(h)
+			// the launcher sometimes swaps its splash window for the main window
+			time.Sleep(1500 * time.Millisecond)
+			if h2 := findWindow(isLauncherWindow); h2 != 0 {
+				if cur, _, _ := procGetForegroundWindow.Call(); cur != h2 {
+					forceForeground(h2)
+				}
+			}
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
 
 // forceForeground brings h to the front, working around Windows' foreground lock.
