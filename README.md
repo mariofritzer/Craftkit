@@ -61,7 +61,7 @@ GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui -s -w" -o CraftKit.ex
 Mit `-X 'main.defaultCurseForgeKey=…'` lässt sich ein CurseForge-Key voreinstellen (nur für private Builds).
 `go build -tags mock` baut eine Testversion, die alle Online-Dienste simuliert.
 
-Neue Versionen veröffentlichen: einen Tag wie `v1.0.1` pushen – GitHub Actions baut die exe und erstellt das Release.
+Neue Versionen veröffentlichen: auf GitHub unter *Releases → Draft a new release* einen Tag wie `v1.0.1` anlegen und veröffentlichen – GitHub Actions baut die exe und hängt sie ans Release.
 
 ## Lizenz
 
