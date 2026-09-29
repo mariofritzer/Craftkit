@@ -805,7 +805,8 @@ function planModal(plan, target, requests, updateAll) {
       ${i.action === "update" ? `<span class="pill pill-gold">Update</span>` : ""}
       ${i.version?.type && i.version.type !== "release" ? `<span class="pill pill-gold">${esc(i.version.type)}</span>` : ""}</div>
       <div class="row-meta">${i.action === "update" ? `<span class="mono">${esc(i.fromVersion)}</span> → ` : ""}<span class="mono">${esc(i.version?.number || "")}</span>
-      ${!i.explicit && (i.requiredBy || []).length ? ` · benötigt von <b>${esc(i.requiredBy.join(", "))}</b>` : ""}${i.note ? " · " + esc(i.note) : ""}</div></div></div>`;
+      ${!i.explicit && (i.requiredBy || []).length ? ` · benötigt von <b>${esc(i.requiredBy.join(", "))}</b>` : ""}${i.note ? " · " + esc(i.note) : ""}</div></div>
+    ${i.pageUrl ? `<a class="btn btn-sm btn-ghost" href="${esc(i.pageUrl)}" data-ext title="Projektseite im Browser öffnen">Seite ↗</a>` : ""}</div>`;
 
   const group = (title, list, extra = "") => list.length ? `<div class="plan-group"><div class="section-label" style="margin:0 0 6px">${title} · ${list.length}</div>${extra}<div class="list">${list.map(row).join("")}</div></div>` : "";
   const banners = [
@@ -826,7 +827,9 @@ function planModal(plan, target, requests, updateAll) {
         <div class="list">${manual.map(row).join("")}</div></div>` : ""}
       ${opt.length ? `<div class="plan-group"><div class="section-label" style="margin:0 0 6px">Optionale Erweiterungen · ${opt.length}</div>
         <div class="list">${opt.map((o, i) => `<label class="row plan-row" style="cursor:pointer"><input type="checkbox" data-opt="${i}" style="accent-color:var(--green);width:16px;height:16px">
-          ${iconHTML(o.iconUrl, o.name)}<div class="grow"><div class="row-title">${esc(o.name)}</div><div class="row-meta">optional für ${esc(o.for)}</div></div></label>`).join("")}</div>
+          ${iconHTML(o.iconUrl, o.name)}<div class="grow"><div class="row-title">${esc(o.name)}</div>
+          ${o.summary ? `<div class="row-meta" style="white-space:normal">${esc(o.summary)}</div>` : ""}<div class="row-meta">optional für ${esc(o.for)}</div></div>
+          ${o.pageUrl ? `<a class="btn btn-sm btn-ghost" href="${esc(o.pageUrl)}" data-ext title="Projektseite im Browser öffnen">Seite ↗</a>` : ""}</label>`).join("")}</div>
         <div style="margin-top:8px"><button class="btn btn-sm" id="optAdd" disabled>Auswahl übernehmen &amp; neu prüfen</button></div></div>` : ""}
       ${keep.length ? `<details class="plan-group"><summary class="section-label" style="cursor:pointer;margin:0">Bereits vorhanden · ${keep.length}</summary><div class="list" style="margin-top:6px">${keep.map(row).join("")}</div></details>` : ""}
     </div>

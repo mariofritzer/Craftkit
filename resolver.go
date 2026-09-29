@@ -111,6 +111,8 @@ type OptionalDep struct {
 	Key       string `json:"key"`
 	Name      string `json:"name"`
 	IconURL   string `json:"iconUrl"`
+	PageURL   string `json:"pageUrl,omitempty"`
+	Summary   string `json:"summary,omitempty"`
 	For       string `json:"for"`
 }
 
@@ -395,6 +397,8 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 				if op, err := r.project(p, q.source, d.ProjectID); err == nil {
 					od.Name = op.Name
 					od.IconURL = op.IconURL
+					od.PageURL = op.PageURL
+					od.Summary = op.Summary
 				} else {
 					od.Name = d.ProjectID
 				}
