@@ -12,13 +12,14 @@ import (
 
 // Config is stored in <dataDir>/config.json
 type Config struct {
-	MinecraftDir  string         `json:"minecraftDir"`
-	InstancesDir  string         `json:"instancesDir"`
-	LauncherPath  string         `json:"launcherPath"`  // empty = auto detect
-	CurseForgeKey string         `json:"curseforgeKey"` // optional
-	JavaPath      string         `json:"javaPath"`      // empty = auto
-	ShowSnapshots bool           `json:"showSnapshots"`
-	PluginFolders []PluginFolder `json:"pluginFolders"`
+	MinecraftDir     string         `json:"minecraftDir"`
+	InstancesDir     string         `json:"instancesDir"`
+	LauncherPath     string         `json:"launcherPath"`  // empty = auto detect
+	CurseForgeKey    string         `json:"curseforgeKey"` // optional
+	JavaPath         string         `json:"javaPath"`      // empty = auto
+	ShowSnapshots    bool           `json:"showSnapshots"`
+	PluginFolders    []PluginFolder `json:"pluginFolders"`
+	AutoBackupWorlds *bool          `json:"autoBackupWorlds,omitempty"` // default on
 	// instances that live outside InstancesDir (profiles taken over from the launcher): id -> folder
 	LinkedInstances map[string]string `json:"linkedInstances"`
 }
@@ -165,3 +166,5 @@ func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
 }
+
+func (c Config) autoBackup() bool { return c.AutoBackupWorlds == nil || *c.AutoBackupWorlds }

@@ -49,6 +49,8 @@ type Instance struct {
 	Adopted       bool                      `json:"adopted,omitempty"`
 	ServerAddress string                    `json:"serverAddress,omitempty"`
 	Modpack       *ModpackRef               `json:"modpack,omitempty"`
+	ResourcePacks map[string]*InstalledItem `json:"resourcePacks,omitempty"`
+	Shaders       map[string]*InstalledItem `json:"shaders,omitempty"`
 	Dir           string                    `json:"dir"`
 }
 
@@ -630,4 +632,36 @@ func touchProfile(in *Instance) error {
 		}
 		return nil
 	})
+}
+
+// PackFile is a resource pack or shader pack in the folder that CraftKit does not manage.
+type PackFile struct {
+	File     string `json:"file"`
+	Name     string `json:"name"`
+	Disabled bool   `json:"disabled"`
+	IsDir    bool   `json:"isDir"`
+}
+
+func foreignPacks(t *Target) []PackFile {
+	known := map[string]bool{}
+	for _, it := range t.Items {
+		known[strings.ToLower(it.FileName)] = true
+		known[strings.ToLower(it.DiskName())] = true
+	}
+	ents, _ := os.ReadDir(t.Dir)
+	var out []PackFile
+	for _, e := range ents {
+		n := e.Name()
+		ln := strings.ToLower(n)
+		if known[ln] || strings.HasPrefix(n, ".") || strings.HasSuffix(ln, ".txt") {
+			continue
+		}
+		if !e.IsDir() && !strings.HasSuffix(ln, ".zip") && !strings.HasSuffix(ln, ".zip.disabled") {
+			continue
+		}
+		name := strings.TrimSuffix(strings.TrimSuffix(n, ".disabled"), ".zip")
+		out = append(out, PackFile{File: n, Name: name, Disabled: strings.HasSuffix(ln, ".disabled"), IsDir: e.IsDir()})
+	}
+	sort.Slice(out, func(i, k int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[k].Name) })
+	return out
 }

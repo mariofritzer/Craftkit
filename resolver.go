@@ -48,6 +48,26 @@ func loadTarget(typ, id string) (*Target, error) {
 			return in.save()
 		}
 		return t, nil
+	case "instance-rp", "instance-shader":
+		in, err := loadInstance(id)
+		if err != nil {
+			return nil, err
+		}
+		t := &Target{Type: typ, ID: id, Name: in.Name, MCVersion: in.MCVersion}
+		if typ == "instance-rp" {
+			if in.ResourcePacks == nil {
+				in.ResourcePacks = map[string]*InstalledItem{}
+			}
+			t.Kind, t.Loaders, t.Dir, t.Items = "resourcepack", []string{"minecraft"}, filepath.Join(in.Dir, "resourcepacks"), in.ResourcePacks
+			t.save = func() error { in.ResourcePacks = t.Items; return in.save() }
+		} else {
+			if in.Shaders == nil {
+				in.Shaders = map[string]*InstalledItem{}
+			}
+			t.Kind, t.Loaders, t.Dir, t.Items = "shader", []string{"iris", "optifine"}, filepath.Join(in.Dir, "shaderpacks"), in.Shaders
+			t.save = func() error { in.Shaders = t.Items; return in.save() }
+		}
+		return t, nil
 	case "plugins":
 		var pf *PluginFolder
 		for _, f := range getConfig().PluginFolders {
@@ -84,6 +104,7 @@ type PlanRequest struct {
 	Source    string `json:"source"`
 	ProjectID string `json:"projectId"`
 	VersionID string `json:"versionId,omitempty"`
+	Optional  bool   `json:"optional,omitempty"` // skip quietly if there is no compatible version (mod sets)
 }
 
 type PlanItem struct {
@@ -197,6 +218,7 @@ type queued struct {
 	source, projectID, versionID string
 	explicit                     bool
 	requiredBy                   string
+	optional                     bool
 }
 
 // resolve builds an installation plan including all required dependencies.
@@ -218,7 +240,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 
 	var queue []queued
 	for _, rq := range reqs {
-		queue = append(queue, queued{rq.Source, rq.ProjectID, rq.VersionID, true, ""})
+		queue = append(queue, queued{rq.Source, rq.ProjectID, rq.VersionID, true, "", rq.Optional})
 	}
 
 	for len(queue) > 0 {
@@ -262,6 +284,20 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 			}
 			plan.Errors = append(plan.Errors, fmt.Sprintf("Projekt %s (%s) nicht abrufbar: %v", q.projectID, who, err))
 			continue
+		}
+		if proj.ID != "" && proj.ID != q.projectID {
+			// requested by slug: continue with the real id so keys match installed items
+			q.projectID = proj.ID
+			key = itemKey(q.source, q.projectID)
+			if it, ok := byKey[key]; ok {
+				if q.requiredBy != "" && !contains(it.RequiredBy, q.requiredBy) {
+					it.RequiredBy = append(it.RequiredBy, q.requiredBy)
+				}
+				if q.explicit {
+					it.Explicit = true
+				}
+				continue
+			}
 		}
 		item := &PlanItem{Key: key, Source: q.source, ProjectID: q.projectID, Slug: proj.Slug, Name: proj.Name,
 			IconURL: proj.IconURL, PageURL: proj.PageURL, Explicit: q.explicit}
@@ -341,6 +377,10 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 				}
 			}
 		}
+		if v == nil && q.optional {
+			plan.Warnings = append(plan.Warnings, fmt.Sprintf("„%s“ gibt es nicht für %s %s – übersprungen.", proj.Name, strings.Join(t.Loaders, "/"), t.MCVersion))
+			continue
+		}
 		if v == nil {
 			msg := fmt.Sprintf("Keine passende Version von „%s“ für %s %s gefunden", proj.Name, strings.Join(t.Loaders, "/"), t.MCVersion)
 			if q.requiredBy != "" {
@@ -387,7 +427,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 				if d.ProjectID != "" {
 					item.Dependencies = append(item.Dependencies, dk)
 				}
-				queue = append(queue, queued{q.source, d.ProjectID, d.VersionID, false, proj.Name})
+				queue = append(queue, queued{q.source, d.ProjectID, d.VersionID, false, proj.Name, false})
 			case "optional":
 				if d.ProjectID == "" || optSeen[dk] || t.Items[dk] != nil {
 					continue
@@ -491,6 +531,18 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 		return nil, err
 	}
 	res := &ApplyResult{Dir: t.Dir}
+	snap := beginSnapshot(t, "Änderung")
+	hasUpdates := false
+	for _, it := range plan.Items {
+		if it.Action == "update" && !it.Manual {
+			hasUpdates = true
+		}
+	}
+	if hasUpdates && t.Type == "instance" && t.Kind == "mod" {
+		if in, err := loadInstance(t.ID); err == nil {
+			autoBackupWorlds(j, in)
+		}
+	}
 	var todo []*PlanItem
 	for _, it := range plan.Items {
 		if it.Action == "keep" {
@@ -512,11 +564,20 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 		f := it.Version.File
 		name := safeFileName(f.FileName)
 		dest := filepath.Join(t.Dir, name)
-		err := download(f.URL, dest, f.Hash, func(done, total int64) {
+		// download next to the target first, so a failed download never touches existing files
+		tmp := filepath.Join(filepath.Dir(dest), "."+name+".craftkit-new")
+		err := download(f.URL, tmp, f.Hash, func(done, total int64) {
 			if total > 0 {
 				j.setProgress(base + span*float64(done)/float64(total))
 			}
 		})
+		if err == nil {
+			// a file with the same name is kept in the snapshot, then replaced
+			if err = snap.moveOut(t, name); err == nil {
+				err = os.Rename(tmp, dest)
+			}
+		}
+		os.Remove(tmp)
 		if err != nil {
 			j.logf("✗ %s: %v", it.Name, err)
 			res.Failed = append(res.Failed, fmt.Sprintf("%s: %v", it.Name, err))
@@ -526,12 +587,18 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 		disabled := prev != nil && prev.Disabled
 		if disabled {
 			// keep a disabled mod disabled after an update
+			snap.moveOut(t, name+".disabled")
 			if err := os.Rename(dest, dest+".disabled"); err != nil {
 				disabled = false
 			}
 		}
+		if disabled {
+			snap.added(name + ".disabled")
+		} else {
+			snap.added(name)
+		}
 		if prev != nil && prev.FileName != "" && !strings.EqualFold(prev.DiskName(), name) && !(disabled && strings.EqualFold(prev.DiskName(), name+".disabled")) {
-			os.Remove(filepath.Join(t.Dir, prev.DiskName()))
+			snap.moveOut(t, prev.DiskName())
 		}
 		explicit := it.Explicit || (prev != nil && prev.Explicit)
 		t.Items[it.Key] = &InstalledItem{
@@ -559,6 +626,8 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 	if err := t.save(); err != nil {
 		return nil, err
 	}
+	snap.commit(t, changeLabel(len(res.Installed), len(res.Updated), 0, res.Installed, res.Updated, nil))
+	recheckLater(t)
 	for _, m := range res.Manual {
 		j.logf("⚠ %s muss manuell von der Website geladen werden: %s", m.Name, m.Version.File.ManualURL)
 	}
@@ -629,11 +698,12 @@ func removeItem(t *Target, key string, withOrphans bool) ([]string, error) {
 	}
 	victims = append([]*InstalledItem{it}, victims...)
 	var removed []string
+	snap := beginSnapshot(t, "Entfernt")
+	defer func() { snap.commit(t, changeLabel(0, 0, len(removed), nil, nil, removed)); recheckLater(t) }()
 	for _, v := range victims {
 		if v.FileName != "" {
-			p := filepath.Join(t.Dir, v.DiskName())
-			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-				return removed, fmt.Errorf("%s konnte nicht gelöscht werden (läuft Minecraft noch?): %w", v.FileName, err)
+			if err := snap.moveOut(t, v.DiskName()); err != nil {
+				return removed, fmt.Errorf("%s konnte nicht entfernt werden (läuft Minecraft noch?): %w", v.FileName, err)
 			}
 		}
 		delete(t.Items, v.Key)
@@ -676,4 +746,28 @@ func setEnabled(t *Target, key, file string, enabled bool) error {
 		return fmt.Errorf("%s konnte nicht umbenannt werden (läuft Minecraft noch?): %w", filepath.Base(from), err)
 	}
 	return nil
+}
+
+// changeLabel describes a change for the undo history.
+func changeLabel(nInst, nUpd, nRem int, inst, upd, rem []string) string {
+	short := func(names []string) string {
+		if len(names) <= 2 {
+			return strings.Join(names, ", ")
+		}
+		return fmt.Sprintf("%s, %s und %d weitere", names[0], names[1], len(names)-2)
+	}
+	var parts []string
+	if nInst > 0 {
+		parts = append(parts, short(inst)+" installiert")
+	}
+	if nUpd > 0 {
+		parts = append(parts, short(upd)+" aktualisiert")
+	}
+	if nRem > 0 {
+		parts = append(parts, short(rem)+" entfernt")
+	}
+	if len(parts) == 0 {
+		return "Änderung"
+	}
+	return strings.Join(parts, "; ")
 }

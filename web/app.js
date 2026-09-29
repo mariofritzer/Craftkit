@@ -22,6 +22,9 @@ const S = {
   source: "modrinth",
 };
 
+const KIND_NOUN = { mod: "Mods", plugin: "Plugins", resourcepack: "Ressourcenpakete", shader: "Shader" };
+const KIND_EXAMPLE = { mod: "Sodium, JEI, Create", plugin: "EssentialsX, LuckPerms", resourcepack: "Faithful, Fresh Animations", shader: "Complementary, BSL, Solas" };
+
 // ---------- helpers ----------
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
@@ -81,9 +84,10 @@ window.addEventListener("pagehide", () => navigator.sendBeacon("/api/bye?t=" + T
 
 // ---------- state ----------
 async function refreshState() {
-  const [st, disc] = await Promise.all([api("/api/state"), api("/api/discover").catch(() => ({ profiles: [], versions: [] }))]);
+  const [st, disc, upd] = await Promise.all([api("/api/state"), api("/api/discover").catch(() => ({ profiles: [], versions: [] })), api("/api/updates").catch(() => null)]);
   S.state = st;
   S.discover = disc;
+  if (upd) S.updates = upd;
   renderSidebar();
   renderTopStatus();
 }
@@ -107,6 +111,7 @@ function renderSidebar() {
       <span class="side-ico ld-${esc(i.loader)}">${LOADERS[i.loader]?.ico || "?"}</span>
       <span class="side-text"><div class="side-title">${esc(i.name)}</div>
       <div class="side-meta">${esc(LOADERS[i.loader]?.name)} · ${esc(i.mcVersion)}${i.loader !== "vanilla" ? " · " + i.modCount + " Mods" : ""}</div></span>
+      ${updBadge("instance:" + i.id)}
     </button>`).join("") : `<div class="side-empty">Noch keine Instanz. Klick auf +.</div>`;
   const pfs = st.pluginFolders || [];
   $("#pluginList").innerHTML = pfs.length ? pfs.map(p => `
@@ -114,6 +119,7 @@ function renderSidebar() {
       <span class="side-ico ld-plugin">🔌</span>
       <span class="side-text"><div class="side-title">${esc(p.name)}</div>
       <div class="side-meta">${esc(PLATFORMS[p.platform] || p.platform)}${p.mcVersion ? " · " + esc(p.mcVersion) : ""} · ${p.count} Plugins</div></span>
+      ${updBadge("plugins:" + p.id)}
     </button>`).join("") : `<div class="side-empty">Kein Plugin-Ordner. Klick auf +.</div>`;
   const found = (S.discover?.profiles || []).filter(p => !p.instanceId);
   $("#foundSection").classList.toggle("hidden", !found.length);
@@ -127,6 +133,11 @@ function renderSidebar() {
   $$("[data-inst]").forEach(b => b.onclick = () => go({ type: "instance", id: b.dataset.inst }));
   $$("[data-pf]").forEach(b => b.onclick = () => go({ type: "plugins", id: b.dataset.pf }));
   $("#btnSettings").classList.toggle("active", v.type === "settings");
+}
+
+function updBadge(key) {
+  const u = S.updates?.targets?.[key];
+  return u && u.count ? `<span class="upd-badge" title="${u.count} Update(s) verfügbar">↑${u.count}</span>` : "";
 }
 
 function loaderLabel(l) {
@@ -460,6 +471,11 @@ async function renderNewPluginFolder(m, edit) {
 
 // ---------- target (instance / plugin folder) ----------
 async function renderTarget(m, type, id, tab) {
+  if (type === "instance-rp" || type === "instance-shader") {
+    const k = type === "instance-rp" ? "rp" : "shader";
+    tab = tab === "add" ? k + "-add" : k;
+    type = "instance";
+  }
   S.view.tab = tab || S.view.tab || "installed";
   m.innerHTML = `<div class="main-inner">${loading()}</div>`;
   let data;
@@ -488,6 +504,7 @@ async function renderTarget(m, type, id, tab) {
     <div class="page-head">${headIco}
       <div class="grow"><h1>${esc(t.name)}</h1><div class="head-meta">${meta}</div></div>
       <div class="actions">
+        ${inst ? `<button class="btn btn-sm" id="tShare" title="Als Modpack-Datei exportieren, um sie mit Freunden zu teilen">📤 Teilen</button>` : ""}
         ${inst ? `<button class="btn btn-sm" id="tUpgrade" title="Neue Instanz mit anderer Minecraft-Version, Mods werden übernommen">⬆ Version wechseln</button><button class="btn btn-sm" id="tServer">🌐 Server</button>` : ""}
         <button class="btn btn-sm" id="tFolder">📁 Ordner</button>
         <button class="btn btn-sm" id="tUpdate" ${items.length ? "" : "disabled"}>↻ Alle aktualisieren</button>
@@ -496,8 +513,11 @@ async function renderTarget(m, type, id, tab) {
       </div>
     </div>
     <div class="tabs">
-      <button class="tab ${S.view.tab === "installed" ? "active" : ""}" data-tab="installed">Installiert<span class="count">${items.length}</span></button>
-      <button class="tab ${S.view.tab === "add" ? "active" : ""}" data-tab="add">${noun} hinzufügen</button>
+      <button class="tab ${S.view.tab === "installed" ? "active" : ""}" data-tab="installed">${noun}<span class="count">${items.length}</span></button>
+      <button class="tab ${S.view.tab === "add" ? "active" : ""}" data-tab="add">+ ${noun} hinzufügen</button>
+      ${inst ? `<button class="tab ${S.view.tab.startsWith("rp") ? "active" : ""}" data-tab="rp">🎨 Ressourcenpakete</button>
+        <button class="tab ${S.view.tab.startsWith("shader") ? "active" : ""}" data-tab="shader">✨ Shader</button>
+        <button class="tab ${S.view.tab === "worlds" ? "active" : ""}" data-tab="worlds">🌍 Welten</button>` : ""}
     </div>
     <div id="tabBody"></div></div>`;
 
@@ -505,6 +525,7 @@ async function renderTarget(m, type, id, tab) {
   $("#tFolder").onclick = () => api("/api/open-folder", { path: inst ? inst.dir : t.dir }).catch(e => toast(e.message, true));
   if (inst) $("#tServer").onclick = () => serverModal(inst);
   if (inst) $("#tUpgrade").onclick = () => upgradeModal(inst);
+  if (inst) $("#tShare").onclick = () => shareModal(inst);
   if (inst && inst.serverAddress) checkServerPill(inst);
   $("#tUpdate").onclick = () => makePlan({ type, id }, [], true);
   $("#tEdit").onclick = () => inst ? instanceSettingsModal(inst) : renderNewPluginFolder(m, pf);
@@ -512,6 +533,8 @@ async function renderTarget(m, type, id, tab) {
 
   const body = $("#tabBody");
   if (S.view.tab === "installed") renderInstalled(body, t, items, data.foreignInfo || []);
+  else if (S.view.tab === "worlds" && inst) renderWorlds(body, inst);
+  else if (inst && /^(rp|shader)(-add)?$/.test(S.view.tab)) renderPacks(body, inst, S.view.tab);
   else renderSearch(body, t);
 }
 
@@ -561,6 +584,8 @@ function renderInstalled(body, t, items, foreign) {
   const explicit = items.filter(i => i.explicit), auto = items.filter(i => !i.explicit);
   const loaderMismatch = f => t.kind === "mod" && f.loader !== "unknown" && !t.loaders.includes(f.loader);
   body.innerHTML = `
+    <div id="undoBox"></div>
+    ${updBanner(t)}
     <div id="missingBox"></div>
     ${explicit.length ? `<div class="section-label" style="margin-top:0">Von dir gewählt · ${explicit.length}</div><div class="card list">${explicit.map(row).join("")}</div>` : ""}
     ${auto.length ? `<div class="section-label">Automatisch mitinstalliert · ${auto.length}</div><div class="card list">${auto.map(row).join("")}</div>` : ""}
@@ -589,6 +614,166 @@ function renderInstalled(body, t, items, foreign) {
     } catch (e) { toast(e.message, true); }
   };
   loadMissing(t);
+  loadUndo(t);
+  if ($("#updAll")) $("#updAll").onclick = () => makePlan({ type: t.type, id: t.id }, [], true);
+}
+
+function updBanner(t) {
+  const u = S.updates?.targets?.[t.type + ":" + t.id];
+  if (!u || !u.count) return "";
+  const list = u.items.slice(0, 6).map(x => `<b>${esc(x.name)}</b> <span class="mono muted">${esc(x.from)} → ${esc(x.to)}</span>`).join(" · ");
+  return `<div class="banner banner-info"><span class="b-ico">↑</span><div style="flex:1"><b>${u.count} Update${u.count > 1 ? "s" : ""} verfügbar</b><div style="margin-top:4px;font-size:13px">${list}${u.count > 6 ? ` · und ${u.count - 6} weitere` : ""}</div></div>
+    <button class="btn btn-sm btn-primary" id="updAll">Jetzt aktualisieren</button></div>`;
+}
+
+async function loadUndo(t) {
+  let h;
+  try { h = await api(`/api/history?type=${t.type}&id=${encodeURIComponent(t.id)}`); } catch { return; }
+  const box = $("#undoBox");
+  if (!box || !h || !h.length) return;
+  const last = h[0];
+  box.innerHTML = `<div class="undo-bar"><span class="muted">Letzte Änderung (${esc(timeAgo(last.created))}):</span> <b>${esc(last.label)}</b>
+    <span class="spacer"></span><button class="btn btn-sm" id="undoBtn">↶ Rückgängig</button></div>`;
+  $("#undoBtn").onclick = () => confirmModal("Rückgängig machen?", `<p>„${esc(last.label)}“ wird rückgängig gemacht – die vorherigen Dateien und Versionen werden wiederhergestellt.</p>`, "Rückgängig machen", async () => {
+    const r = await api("/api/rollback", { type: t.type, id: t.id });
+    toast("Rückgängig gemacht: " + r.label);
+    await refreshState();
+    renderTarget($("#main"), t.type, t.id, "installed");
+  });
+}
+
+function timeAgo(iso) {
+  const d = new Date(iso), s = (Date.now() - d) / 1000;
+  if (isNaN(s)) return "";
+  if (s < 60) return "gerade eben";
+  if (s < 3600) return `vor ${Math.round(s / 60)} Min.`;
+  if (s < 86400) return `vor ${Math.round(s / 3600)} Std.`;
+  if (s < 86400 * 7) return `vor ${Math.round(s / 86400)} Tagen`;
+  return fmtDate(iso);
+}
+
+function fmtSize(b) {
+  if (!b) return "0 MB";
+  if (b >= 1 << 30) return (b / (1 << 30)).toFixed(1).replace(".", ",") + " GB";
+  return Math.max(1, Math.round(b / (1 << 20))) + " MB";
+}
+
+// ---------- mod sets ----------
+async function renderSets(t) {
+  if (!S.sets) S.sets = await api("/api/sets").catch(() => []);
+  const box = $("#setsBox");
+  if (!box || !S.sets.length) return;
+  box.innerHTML = `<div class="section-label" style="margin-top:0">Mod-Sets – mit einem Klick</div>
+    <div class="sets">${S.sets.map(st => `<button class="set-card" data-set="${esc(st.id)}"><span class="set-ico">${st.icon}</span>
+      <span><b>${esc(st.name)}</b><span class="muted">${esc(st.description)}</span></span></button>`).join("")}</div>
+    <div class="section-label">Oder einzeln suchen</div>`;
+  $$("[data-set]", box).forEach(b => b.onclick = async () => {
+    const md = modal(`<div class="modal-head"><h2>Mod-Set wird zusammengestellt</h2></div><div class="modal-body">${loading("Suche passende Versionen …")}</div>`);
+    try {
+      const plan = await api("/api/sets/plan", { type: t.type, id: t.id, set: b.dataset.set });
+      closeModal(md);
+      planModal(plan, { type: t.type, id: t.id }, [], false);
+    } catch (e) { closeModal(md); toast(e.message, true); }
+  });
+}
+
+// ---------- resource packs & shaders ----------
+async function renderPacks(body, inst, tab) {
+  const kind = tab.startsWith("rp") ? "rp" : "shader";
+  const type = kind === "rp" ? "instance-rp" : "instance-shader";
+  const adding = tab.endsWith("-add");
+  let d;
+  body.innerHTML = loading();
+  try { d = await api(`/api/target?type=${type}&id=${encodeURIComponent(inst.id)}`); }
+  catch (e) { body.innerHTML = `<div class="banner banner-err"><span class="b-ico">✕</span><div>${esc(e.message)}</div></div>`; return; }
+  const t = d.target, items = (d.items || []).sort((a, b) => a.name.localeCompare(b.name)), foreign = d.foreignPacks || [];
+  const noun = KIND_NOUN[t.kind];
+  const help = d.shaderHelp;
+  body.innerHTML = `
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:14px">
+      <div class="seg"><button data-pk="${kind}" class="${adding ? "" : "active"}">Installiert (${items.length + foreign.length})</button><button data-pk="${kind}-add" class="${adding ? "active" : ""}">+ Hinzufügen</button></div>
+      <span style="flex:1"></span><button class="btn btn-sm" id="pkFolder">📁 Ordner</button></div>
+    ${help && !help.supported ? `<div class="banner banner-warn"><span class="b-ico">⚠</span><div style="flex:1">${esc(help.message)}</div>
+      ${help.suggestId ? `<button class="btn btn-sm btn-primary" id="shaderFix">${help.suggest === "oculus" ? "Oculus" : "Iris"} installieren</button>` : ""}</div>` : ""}
+    ${help && help.supported ? `<div class="muted" style="font-size:12.5px;margin-bottom:10px">Shader werden über <b>${esc(help.via)}</b> geladen. Aktivieren kannst du ein Shaderpack im Spiel unter Optionen → Grafik → Shaderpakete.</div>` : ""}
+    ${kind === "rp" && !adding ? `<div class="muted" style="font-size:12.5px;margin-bottom:10px">Aktivieren kannst du Ressourcenpakete im Spiel unter Optionen → Ressourcenpakete.</div>` : ""}
+    <div id="pkBody"></div>`;
+  $$("[data-pk]", body).forEach(b => b.onclick = () => renderTarget($("#main"), "instance", inst.id, b.dataset.pk));
+  $("#pkFolder").onclick = () => api("/api/open-folder", { path: t.dir });
+  if ($("#shaderFix")) $("#shaderFix").onclick = () => makePlan({ type: "instance", id: inst.id }, [{ source: "modrinth", projectId: help.suggestId }]);
+  const pb = $("#pkBody");
+  if (adding) { renderSearch(pb, t); return; }
+  if (!items.length && !foreign.length) {
+    pb.innerHTML = `<div class="card empty"><div class="big">${kind === "rp" ? "🎨" : "✨"}</div>Noch keine ${noun} installiert.<div style="margin-top:14px"><button class="btn btn-primary" id="pkAdd">${noun} suchen</button></div></div>`;
+    $("#pkAdd").onclick = () => renderTarget($("#main"), "instance", inst.id, kind + "-add");
+    return;
+  }
+  pb.innerHTML = `<div id="pkManaged"></div>
+    ${foreign.length ? `<div class="section-label">Nicht über CraftKit installiert · ${foreign.length}</div>
+      <div class="card list">${foreign.map(f => `<div class="row ${f.disabled ? "row-off" : ""}">${f.isDir ? `<div style="width:34px"></div>` : toggleHTML(!f.disabled, `data-pfile="${esc(f.file)}"`)}
+        ${iconHTML("", f.name)}<div class="grow"><div class="row-title">${esc(f.name)}${f.disabled ? `<span class="pill">deaktiviert</span>` : ""}${f.isDir ? `<span class="pill">Ordner</span>` : ""}</div>
+        <div class="row-meta">${esc(f.file)}</div></div>
+        ${f.isDir ? "" : `<button class="btn btn-sm btn-danger" data-pdel="${esc(f.file)}">Löschen</button>`}</div>`).join("")}</div>` : ""}`;
+  if (items.length) renderInstalled($("#pkManaged"), t, items, []);
+  $$("[data-pfile]", pb).forEach(b => b.onchange = () => toggleFlow(t, { file: b.dataset.pfile, name: b.dataset.pfile }, b.checked, b));
+  $$("[data-pdel]", pb).forEach(b => b.onclick = () => confirmModal("Datei löschen?", `„${esc(b.dataset.pdel)}“ wird gelöscht.`, "Löschen", async () => {
+    await api("/api/remove-foreign", { type: t.type, id: t.id, file: b.dataset.pdel });
+    renderTarget($("#main"), "instance", inst.id, kind);
+  }));
+}
+
+// ---------- worlds ----------
+async function renderWorlds(body, inst) {
+  body.innerHTML = loading("Lese Welten …");
+  let d;
+  try { d = await api("/api/worlds?id=" + encodeURIComponent(inst.id)); }
+  catch (e) { body.innerHTML = `<div class="banner banner-err"><span class="b-ico">✕</span><div>${esc(e.message)}</div></div>`; return; }
+  const worlds = (d.worlds || []).map(w => ({ ...w, backups: w.backups || [] }));
+  body.innerHTML = `
+    <div class="banner banner-info"><span class="b-ico">🛟</span><div style="flex:1">Sicherungen liegen in <span class="mono">${esc(d.backupDir)}</span>. Pro Welt bleiben die ${5} neuesten erhalten.
+      ${d.auto ? "Vor Mod-Updates sichert CraftKit kürzlich gespielte Welten automatisch." : "Die automatische Sicherung vor Mod-Updates ist in den Einstellungen ausgeschaltet."}</div>
+      <button class="btn btn-sm" id="wbFolder">📁 Öffnen</button></div>
+    ${worlds.length ? worlds.map((w, i) => `<div class="card" style="margin-bottom:10px">
+      <div class="row" style="border-bottom:${w.backups.length ? "1px solid var(--line)" : "none"}">
+        <div class="mod-icon">🌍</div>
+        <div class="grow"><div class="row-title">${esc(w.folder)}${w.lastPlayed ? "" : `<span class="pill pill-gold">nur noch als Sicherung</span>`}</div>
+          <div class="row-meta">${w.lastPlayed ? `zuletzt gespielt ${esc(timeAgo(w.lastPlayed))} · ${fmtSize(w.sizeBytes)} · ` : ""}${w.backups.length} Sicherung(en)</div></div>
+        ${w.lastPlayed ? `<button class="btn btn-sm btn-primary" data-wbackup="${i}">Jetzt sichern</button>` : ""}
+      </div>
+      ${w.backups.map((b, k) => `<div class="row plan-row" style="padding-left:66px">
+        <div class="grow"><div class="row-title" style="font-weight:500">${esc(fmtDateTime(b.created))}${b.auto ? `<span class="pill">automatisch</span>` : ""}</div>
+          <div class="row-meta">${fmtSize(b.sizeBytes)}</div></div>
+        <button class="btn btn-sm" data-wrestore="${i}:${k}">Wiederherstellen</button>
+        <button class="btn btn-sm btn-ghost" data-wdel="${i}:${k}" title="Sicherung löschen">✕</button></div>`).join("")}
+    </div>`).join("") : `<div class="card empty"><div class="big">🌍</div>Noch keine Welten in dieser Instanz.</div>`}`;
+  $("#wbFolder").onclick = () => api("/api/open-folder", { path: d.backupDir });
+  $$("[data-wbackup]", body).forEach(b => b.onclick = async () => {
+    const w = worlds[+b.dataset.wbackup];
+    try {
+      const { job } = await api("/api/worlds/backup", { id: inst.id, folder: w.folder });
+      jobModal(job, `„${w.folder}“ wird gesichert`, async (r, jmd) => { closeModal(jmd); toast(`„${w.folder}“ gesichert.`); renderWorlds(body, inst); });
+    } catch (e) { toast(e.message, true); }
+  });
+  $$("[data-wrestore]", body).forEach(b => b.onclick = () => {
+    const [i, k] = b.dataset.wrestore.split(":").map(Number), w = worlds[i], bk = w.backups[k];
+    confirmModal("Welt wiederherstellen?", `<p>„${esc(w.folder)}“ wird auf den Stand vom <b>${esc(fmtDateTime(bk.created))}</b> zurückgesetzt.</p>
+      <p class="muted">Der aktuelle Stand wird vorher automatisch gesichert – du kannst also jederzeit zurück. Minecraft muss dafür geschlossen sein.</p>`, "Wiederherstellen", async () => {
+      const { job } = await api("/api/worlds/restore", { id: inst.id, folder: w.folder, file: bk.file });
+      jobModal(job, `„${w.folder}“ wird wiederhergestellt`, async (r, jmd) => { closeModal(jmd); toast(`„${w.folder}“ wiederhergestellt.`); renderWorlds(body, inst); });
+    });
+  });
+  $$("[data-wdel]", body).forEach(b => b.onclick = () => {
+    const [i, k] = b.dataset.wdel.split(":").map(Number), w = worlds[i], bk = w.backups[k];
+    confirmModal("Sicherung löschen?", `<p>Die Sicherung von „${esc(w.folder)}“ vom ${esc(fmtDateTime(bk.created))} wird gelöscht.</p>`, "Löschen", async () => {
+      await api("/api/worlds/delete-backup", { id: inst.id, folder: w.folder, file: bk.file });
+      renderWorlds(body, inst);
+    });
+  });
+}
+
+function fmtDateTime(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleString("de-AT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 // Checks all jars in the folder (also ones not from CraftKit) for missing dependencies.
@@ -654,13 +839,19 @@ async function removeFlow(t, it) {
 
 // ---------- search ----------
 function renderSearch(body, t) {
-  const noun = t.kind === "plugin" ? "Plugins" : "Mods";
+  const noun = KIND_NOUN[t.kind] || "Mods";
+  if (!S.cartTarget || S.cartTarget.type !== t.type || S.cartTarget.id !== t.id) {
+    S.cart = [];
+    S.cartTarget = { type: t.type, id: t.id };
+    renderCart();
+  }
   body.innerHTML = `
+    ${t.kind === "mod" ? `<div id="setsBox"></div>` : ""}
     <div class="searchbar">
       <div class="seg" id="srcSeg">${Object.entries(SOURCES).map(([k, n]) => `<button data-src="${k}" class="${S.source === k ? "active" : ""}">${n}</button>`).join("")}</div>
-      <input class="input search-input" id="q" placeholder="${noun} suchen, z. B. ${t.kind === "plugin" ? "EssentialsX, LuckPerms" : "Sodium, JEI, Create"} …" autocomplete="off">
+      <input class="input search-input" id="q" placeholder="${noun} suchen, z. B. ${KIND_EXAMPLE[t.kind] || ""} …" autocomplete="off">
     </div>
-    <div class="muted" style="font-size:12.5px;margin:-4px 0 12px">Zeigt nur ${noun}, die zu ${esc(t.loaders.join(" / "))}${t.kind === "mod" ? " und Minecraft " + esc(t.mcVersion) : ""} passen. Voraussetzungen werden beim Installieren automatisch ergänzt.</div>
+    <div class="muted" style="font-size:12.5px;margin:-4px 0 12px">${t.kind === "resourcepack" ? `Beim Installieren wird die passendste Version für Minecraft ${esc(t.mcVersion)} gewählt.` : `Zeigt nur ${noun}, die zu ${esc(t.loaders.join(" / "))}${t.kind === "mod" ? " und Minecraft " + esc(t.mcVersion) : ""} passen.`} Voraussetzungen werden beim Installieren automatisch ergänzt.</div>
     <div id="results"></div>`;
   $$("[data-src]", body).forEach(b => b.onclick = () => {
     S.source = b.dataset.src;
@@ -670,6 +861,7 @@ function renderSearch(body, t) {
   let timer;
   $("#q").oninput = () => { clearTimeout(timer); timer = setTimeout(() => doSearch(t, $("#q").value, 0), 350); };
   $("#q").focus();
+  if (t.kind === "mod") renderSets(t);
   doSearch(t, "", 0);
 }
 
@@ -860,7 +1052,7 @@ function planModal(plan, target, requests, updateAll) {
         S.cart = [];
         renderCart();
         await refreshState();
-        if (S.view.type === target.type && S.view.id === target.id) renderTarget($("#main"), target.type, target.id, "installed");
+        if (target.type.startsWith(S.view.type) && S.view.id === target.id) renderTarget($("#main"), target.type, target.id, "installed");
       }, plan.target.dir);
     } catch (e) { toast(e.message, true); }
   };
@@ -1170,6 +1362,49 @@ async function serverModal(inst) {
   if (inst?.serverAddress) doPing(); else $("#sAddr", md).focus();
 }
 
+// ---------- share (export as .mrpack) ----------
+function shareModal(inst) {
+  const today = new Date().toISOString().slice(0, 10).replace(/-/g, ".");
+  const md = modal(`<div class="modal-head"><div style="flex:1"><h2>📤 Instanz teilen</h2>
+      <div class="sub">Erstellt eine Modpack-Datei (.mrpack). Deine Freunde ziehen sie in CraftKit (Neue Instanz → 📦 Modpack) oder öffnen sie mit dem Modrinth-Launcher – und haben genau deine Mods in denselben Versionen.</div></div></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field"><label>Name des Modpacks</label><input class="input" id="eName" value="${esc(inst.name)}" maxlength="60"></div>
+        <div class="field"><label>Version</label><input class="input" id="eVer" value="${esc(today)}" maxlength="30"></div>
+      </div>
+      <div class="section-label">Was soll mit?</div>
+      <div style="display:grid;gap:8px">
+        <label class="check"><input type="checkbox" id="eCfg" checked> Mod-Einstellungen (Ordner config)</label>
+        <label class="check"><input type="checkbox" id="eRp" checked> Ressourcenpakete</label>
+        <label class="check"><input type="checkbox" id="eSh" checked> Shader</label>
+        <label class="check"><input type="checkbox" id="eSrv" checked> Server-Liste (Mehrspieler)</label>
+        <label class="check"><input type="checkbox" id="eOpt"> Eigene Spieleinstellungen (Grafik, Tastenbelegung)</label>
+      </div>
+      <p class="muted" style="font-size:12.5px;margin-top:12px">Mods von Modrinth werden nur verlinkt, dadurch bleibt die Datei klein. Andere Mods (CurseForge, selbst hinzugefügte) werden mitgepackt. Welten werden nicht geteilt.</p>
+      <div id="eResult"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Schließen</button><button class="btn btn-primary" id="eGo">Exportieren</button></div>`);
+  $("#eGo", md).onclick = async () => {
+    const btn = $("#eGo", md);
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner" style="width:14px;height:14px"></span> Exportiere …`;
+    try {
+      const r = await api("/api/export", { id: inst.id, name: $("#eName", md).value, version: $("#eVer", md).value,
+        config: $("#eCfg", md).checked, resourcePacks: $("#eRp", md).checked, shaderPacks: $("#eSh", md).checked,
+        servers: $("#eSrv", md).checked, options: $("#eOpt", md).checked });
+      const a = document.createElement("a");
+      a.href = `/api/export/download?key=${r.key}&t=${TOKEN}`;
+      a.download = r.fileName;
+      document.body.appendChild(a); a.click(); a.remove();
+      $("#eResult", md).innerHTML = `<div class="banner banner-info" style="margin:12px 0 0"><span class="b-ico">✓</span><div>
+        <b>${esc(r.fileName)}</b> (${fmtSize(r.size)}) wurde in deinen Downloads gespeichert.<br>
+        ${r.linked} Mod(s) verlinkt${(r.packed || []).length ? `, ${r.packed.length} mitgepackt: ${esc(r.packed.join(", "))}` : ""}.</div></div>`;
+      btn.textContent = "Erneut exportieren";
+    } catch (e) { toast(e.message, true); btn.textContent = "Exportieren"; }
+    btn.disabled = false;
+  };
+}
+
 // ---------- move an instance to another Minecraft version ----------
 function cmpMC(a, b) {
   const pa = a.split(/[.-]/).map(n => parseInt(n) || 0), pb = b.split(/[.-]/).map(n => parseInt(n) || 0);
@@ -1187,6 +1422,7 @@ async function upgradeModal(inst) {
         <div class="field"><label>Loader</label><select class="input" id="uLoader">${Object.entries(LOADERS).map(([k, l]) => `<option value="${k}" ${k === inst.loader ? "selected" : ""}>${l.name}</option>`).join("")}</select>
           <span class="hint">Beim Wechsel des Loaders werden nur Mods übernommen, die es auch dafür gibt.</span></div>
       </div>
+      <div id="uPreview" style="margin-top:14px"></div>
       <label class="check" style="margin-top:14px"><input type="checkbox" id="uSaves"> Welten mitnehmen (als Kopie)</label>
       <div id="uWarn" style="margin-top:12px"></div>
     </div>
@@ -1212,6 +1448,31 @@ async function upgradeModal(inst) {
     if (older) h += `<div class="banner banner-warn" style="margin:0 0 8px"><span class="b-ico">⚠</span><div>Das ist eine <b>ältere</b> Version. Welten aus neueren Versionen können darin beschädigt werden – nimm sie besser nicht mit.</div></div>`;
     if ($("#uSaves", md).checked) h += `<div class="banner banner-info" style="margin:0"><span class="b-ico">ℹ</span><div>Die Welten werden kopiert. Sobald du eine Kopie in der neuen Version öffnest, wird sie umgewandelt – die Originale in „${esc(inst.name)}“ bleiben unberührt.</div></div>`;
     $("#uWarn", md).innerHTML = h;
+    preview();
+  };
+  let pvSeq = 0, pvTimer;
+  const preview = () => {
+    clearTimeout(pvTimer);
+    const box = $("#uPreview", md);
+    if (!mods.length) { box.innerHTML = ""; return; }
+    const mc = $("#uMc", md).value, loader = $("#uLoader", md).value;
+    if (loader === "vanilla") { box.innerHTML = `<div class="banner banner-warn" style="margin:0"><span class="b-ico">⚠</span><div>Vanilla lädt keine Mods – deine ${mods.length} Mods werden nicht übernommen.</div></div>`; return; }
+    box.innerHTML = loading(`Prüfe, welche deiner ${mods.length} Mods es für ${loaderLabel(loader)} ${mc} gibt …`);
+    const seq = ++pvSeq;
+    pvTimer = setTimeout(async () => {
+      let list;
+      try { list = await api(`/api/preview-version?id=${encodeURIComponent(inst.id)}&mc=${encodeURIComponent(mc)}&loader=${loader}`); }
+      catch (e) { if (seq === pvSeq) box.innerHTML = ""; return; }
+      if (seq !== pvSeq) return;
+      const ok = list.filter(x => x.available), missing = list.filter(x => !x.available);
+      box.innerHTML = `<div class="card" style="padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:10px"><b>Vorschau:</b>
+          <span class="pill ${missing.length ? "pill-gold" : "pill-green"}">${ok.length} von ${list.length} Mods verfügbar</span></div>
+        <div class="progress" style="margin:10px 0 8px"><div style="width:${list.length ? ok.length / list.length * 100 : 0}%"></div></div>
+        ${missing.length ? `<div style="font-size:13px"><span class="muted">Gibt es (noch) nicht für ${esc(loaderLabel(loader))} ${esc(mc)}:</span> ${missing.map(x => `<b>${esc(x.name)}</b>`).join(", ")}</div>` : `<div style="font-size:13px" class="muted">Alle deine Mods gibt es für diese Version.</div>`}
+        ${ok.length ? `<details style="margin-top:6px;font-size:13px"><summary class="muted" style="cursor:pointer">Verfügbare anzeigen</summary><div style="margin-top:6px">${ok.map(x => `${esc(x.name)} <span class="mono muted">${esc(x.version)}</span>`).join(" · ")}</div></details>` : ""}
+      </div>`;
+    }, 400);
   };
   $("#uLoader", md).onchange = loadVersions;
   $("#uMc", md).onchange = warn;
@@ -1268,6 +1529,7 @@ function renderSettings(m) {
       <div class="field"><label>Java für Forge/NeoForge-Installer (optional)</label><input class="input mono" id="jPath" value="${esc(c.javaPath)}" placeholder="automatisch">
         <span class="hint">${S.state.java ? "Gefunden: " + esc(S.state.java) : "Kein Java gefunden – wird bei Bedarf automatisch geladen."}</span></div>
       <label class="check"><input type="checkbox" id="snap" ${c.showSnapshots ? "checked" : ""}> Snapshots standardmäßig anzeigen</label>
+      <label class="check"><input type="checkbox" id="autoBk" ${c.autoBackupWorlds !== false ? "checked" : ""}> Welten vor Mod-Updates automatisch sichern</label>
     </div>
     <div style="display:flex;justify-content:flex-end;margin-top:16px"><button class="btn btn-primary" id="cSave">Speichern</button></div></div></div>`;
   $("#chkUpd").onclick = () => checkForUpdate(true);
@@ -1278,7 +1540,7 @@ function renderSettings(m) {
   $("#cSave").onclick = async () => {
     try {
       await api("/api/config", { minecraftDir: $("#mcDir").value, instancesDir: $("#instDir").value, launcherPath: $("#lPath").value,
-        curseforgeKey: $("#cfKey").value, javaPath: $("#jPath").value, showSnapshots: $("#snap").checked });
+        curseforgeKey: $("#cfKey").value, javaPath: $("#jPath").value, showSnapshots: $("#snap").checked, autoBackupWorlds: $("#autoBk").checked });
       await refreshState();
       toast("Gespeichert.");
       renderSettings(m);

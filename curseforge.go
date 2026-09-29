@@ -67,6 +67,10 @@ func (c curseforge) Search(q SearchQuery) ([]Project, int, error) {
 	v.Set("gameId", strconv.Itoa(cfGameMinecraft))
 	if q.Kind == "modpack" {
 		v.Set("classId", strconv.Itoa(cfClassModpacks))
+	} else if q.Kind == "resourcepack" {
+		v.Set("classId", "12")
+	} else if q.Kind == "shader" {
+		v.Set("classId", "6552")
 	} else if q.Kind == "plugin" {
 		v.Set("classId", strconv.Itoa(cfClassBukkitPlugins))
 	} else {
@@ -237,7 +241,7 @@ func (c curseforge) Versions(projectID, kind, mc string, loaders []string) ([]Mo
 			return nil, err
 		}
 		add(fs)
-	} else if kind == "plugin" {
+	} else if kind == "plugin" || kind == "resourcepack" || kind == "shader" {
 		fs, err := c.filesPage(projectID, mc, 0)
 		if err != nil {
 			return nil, err

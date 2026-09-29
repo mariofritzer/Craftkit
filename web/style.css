@@ -325,3 +325,14 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .switch input:checked + span::after { transform: translateX(14px); }
 .switch input:focus-visible + span { box-shadow: 0 0 0 3px var(--green-soft); }
 .row-off .mod-icon, .row-off .row-title, .row-off .row-meta { opacity: .5; }
+
+.undo-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 14px; border-radius: var(--radius); background: var(--panel); border: 1px solid var(--line); font-size: 13.5px; }
+.undo-bar .spacer { flex: 1; }
+.upd-badge { margin-left: auto; flex-shrink: 0; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 99px; background: var(--green); color: #0d1a05; }
+
+.sets { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; }
+.set-card { display: flex; gap: 12px; align-items: flex-start; text-align: left; padding: 12px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--panel); cursor: pointer; }
+.set-card:hover { border-color: var(--green); background: var(--panel-2); }
+.set-card b { display: block; }
+.set-card .muted { display: block; font-size: 12.5px; margin-top: 2px; }
+.set-ico { font-size: 22px; line-height: 1; }

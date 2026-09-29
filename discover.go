@@ -285,7 +285,11 @@ func identifyTarget(j *Job, t *Target) (*IdentifyResult, error) {
 	for _, e := range ents {
 		n := e.Name()
 		ln := strings.ToLower(n)
-		if e.IsDir() || !(strings.HasSuffix(ln, ".jar") || strings.HasSuffix(ln, ".jar.disabled")) || managed[ln] {
+		ext := ".jar"
+		if t.Kind == "resourcepack" || t.Kind == "shader" {
+			ext = ".zip"
+		}
+		if e.IsDir() || !(strings.HasSuffix(ln, ext) || strings.HasSuffix(ln, ext+".disabled")) || managed[ln] {
 			continue
 		}
 		h, data, err := fileSHA1(filepath.Join(t.Dir, n))
@@ -436,6 +440,7 @@ func identifyTarget(j *Job, t *Target) (*IdentifyResult, error) {
 		res.Recognized = append(res.Recognized, it.Name)
 		j.logf("✓ erkannt: %s %s (%s)", it.Name, it.VersionNumber, sourceNames[it.Source])
 	}
+	recheckLater(t)
 	for _, u := range res.Unknown {
 		j.logf("? nicht erkannt: %s", u)
 	}

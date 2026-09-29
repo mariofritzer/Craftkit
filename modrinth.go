@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const modrinthAPI = "https://api.modrinth.com/v2"
+var modrinthAPI = "https://api.modrinth.com/v2"
 
 type modrinth struct{}
 
@@ -29,7 +29,7 @@ type mrHit struct {
 
 func mrPage(kind, slug string) string {
 	t := "mod"
-	if kind == "plugin" || kind == "modpack" {
+	if kind == "plugin" || kind == "modpack" || kind == "resourcepack" || kind == "shader" {
 		t = kind
 	}
 	return "https://modrinth.com/" + t + "/" + slug
@@ -51,14 +51,14 @@ func mustJSON(v any) string {
 
 func (modrinth) Search(q SearchQuery) ([]Project, int, error) {
 	var facets [][]string
-	if q.Kind == "modpack" {
-		facets = append(facets, []string{"project_type:modpack"})
+	if q.Kind == "modpack" || q.Kind == "resourcepack" || q.Kind == "shader" {
+		facets = append(facets, []string{"project_type:" + q.Kind})
 	} else if q.Kind == "plugin" {
 		facets = append(facets, []string{"project_type:plugin", "project_type:mod"})
 	} else {
 		facets = append(facets, []string{"project_type:mod"})
 	}
-	if len(q.Loaders) > 0 {
+	if len(q.Loaders) > 0 && q.Kind != "resourcepack" {
 		var l []string
 		for _, x := range q.Loaders {
 			l = append(l, "categories:"+x)
@@ -108,8 +108,8 @@ func (modrinth) Project(id string) (*Project, error) {
 		return nil, err
 	}
 	kind := "mod"
-	if p.ProjectType == "modpack" {
-		kind = "modpack"
+	if p.ProjectType == "modpack" || p.ProjectType == "resourcepack" || p.ProjectType == "shader" {
+		kind = p.ProjectType
 	} else if containsAny(p.Loaders, []string{"paper", "spigot", "bukkit", "purpur", "folia", "velocity", "bungeecord", "waterfall"}) && !containsAny(p.Loaders, []string{"fabric", "forge", "neoforge", "quilt"}) {
 		kind = "plugin"
 	}
@@ -193,7 +193,7 @@ func (modrinth) Versions(projectID, kind, mc string, loaders []string) ([]ModVer
 		return nil, err
 	}
 	// Plugins are usually forward compatible and often not tagged with every MC version.
-	if len(out) == 0 && kind == "plugin" && mc != "" {
+	if len(out) == 0 && (kind == "plugin" || kind == "resourcepack" || kind == "shader") && mc != "" {
 		out, err = fetch(false)
 		for i := range out {
 			out[i].Note = fmt.Sprintf("nicht ausdrücklich für %s markiert", mc)

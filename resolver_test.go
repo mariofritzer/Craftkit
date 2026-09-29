@@ -237,3 +237,5 @@ func TestEnableDisable(t *testing.T) {
 		t.Fatalf("disabled dependency should count as missing: %+v", m)
 	}
 }
+
+func init() { inUnitTest = true }

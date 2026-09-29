@@ -12,6 +12,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -56,6 +57,7 @@ func main() {
 	logf("CraftKit %s startet, Daten: %s", appVersion, dataDir())
 
 	go cleanupOldExe()
+	startUpdateWatcher()
 	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", *port))
 	// after an update the old process still holds the port for a moment – wait for it
 	for i := 0; err != nil && *afterUpdate && i < 40; i++ {
@@ -334,7 +336,15 @@ func registerRoutes(mux *http.ServeMux) {
 			foreignInfo = append(foreignInfo, ji)
 		}
 		out["foreignInfo"] = foreignInfo
-		if t.Type == "instance" {
+		if t.Kind == "resourcepack" || t.Kind == "shader" {
+			out["foreignPacks"] = foreignPacks(t)
+			if t.Kind == "shader" {
+				if in, err := loadInstance(t.ID); err == nil {
+					out["shaderHelp"] = shaderHelp(in)
+				}
+			}
+		}
+		if strings.HasPrefix(t.Type, "instance") {
 			in, _ := loadInstance(t.ID)
 			out["instance"] = in
 		}
@@ -353,8 +363,8 @@ func registerRoutes(mux *http.ServeMux) {
 		}
 		off, _ := strconv.Atoi(q.Get("offset"))
 		sq := SearchQuery{Query: strings.TrimSpace(q.Get("q")), Kind: t.Kind, MCVersion: t.MCVersion, Loaders: t.Loaders, Offset: off, Limit: 20}
-		if t.Kind == "plugin" {
-			sq.MCVersion = "" // plugins are rarely tagged per version, filter at install time
+		if t.Kind != "mod" {
+			sq.MCVersion = "" // plugins and packs are rarely tagged per version, filter at install time
 		}
 		hits, total, err := p.Search(sq)
 		if err != nil {
@@ -427,6 +437,13 @@ func registerRoutes(mux *http.ServeMux) {
 			return res, nil
 		}
 		plan := newResolver().resolve(t, reqs)
+		if t.Kind == "shader" {
+			if in, err := loadInstance(t.ID); err == nil {
+				if h := shaderHelp(in); !h.Supported && h.Message != "" {
+					plan.Warnings = append(plan.Warnings, h.Message+" Du findest den Knopf dafür im Reiter „Shader“.")
+				}
+			}
+		}
 		storePlan(plan)
 		return plan, nil
 	}))
@@ -644,6 +661,9 @@ func registerRoutes(mux *http.ServeMux) {
 			c.CurseForgeKey = strings.TrimSpace(req.CurseForgeKey)
 			c.JavaPath = strings.TrimSpace(req.JavaPath)
 			c.ShowSnapshots = req.ShowSnapshots
+			if req.AutoBackupWorlds != nil {
+				c.AutoBackupWorlds = req.AutoBackupWorlds
+			}
 		})
 		return getConfig(), err
 	}))
@@ -713,6 +733,162 @@ func registerRoutes(mux *http.ServeMux) {
 			out = append(out, m)
 		}
 		return out, nil
+	}))
+
+	// ---------- mod sets ----------
+	mux.HandleFunc("/api/sets", api(func(r *http.Request) (any, error) {
+		return modSets, nil
+	}))
+	mux.HandleFunc("/api/sets/plan", api(func(r *http.Request) (any, error) {
+		var req struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+			Set  string `json:"set"`
+		}
+		if err := readBody(r, &req); err != nil {
+			return nil, err
+		}
+		t, err := loadTarget(req.Type, req.ID)
+		if err != nil {
+			return nil, err
+		}
+		reqs, err := modSetRequests(req.Set)
+		if err != nil {
+			return nil, err
+		}
+		plan := newResolver().resolve(t, reqs)
+		storePlan(plan)
+		return plan, nil
+	}))
+
+	// ---------- export ----------
+	mux.HandleFunc("/api/export", api(func(r *http.Request) (any, error) {
+		var req struct {
+			ID string `json:"id"`
+			ExportOptions
+		}
+		if err := readBody(r, &req); err != nil {
+			return nil, err
+		}
+		res, err := exportInstance(req.ID, req.ExportOptions)
+		if err != nil {
+			return nil, err
+		}
+		b := make([]byte, 12)
+		rand.Read(b)
+		key := hex.EncodeToString(b)
+		exportsMu.Lock()
+		exports[key] = res
+		exportsMu.Unlock()
+		return map[string]any{"key": key, "fileName": res.FileName, "linked": res.Linked, "packed": res.Packed, "size": res.Size}, nil
+	}))
+	mux.HandleFunc("/api/export/download", func(w http.ResponseWriter, r *http.Request) {
+		exportsMu.Lock()
+		res := exports[r.URL.Query().Get("key")]
+		exportsMu.Unlock()
+		if res == nil {
+			http.Error(w, "Export abgelaufen", 404)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-modrinth-modpack+zip")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q; filename*=UTF-8''%s", res.FileName, urlPathEscape(res.FileName)))
+		http.ServeFile(w, r, res.Path)
+	})
+
+	// ---------- update overview / preview ----------
+	mux.HandleFunc("/api/updates", api(func(r *http.Request) (any, error) {
+		if r.URL.Query().Get("refresh") == "1" {
+			go refreshAllUpdates(true)
+			time.Sleep(100 * time.Millisecond)
+		}
+		return updateSummary(), nil
+	}))
+	mux.HandleFunc("/api/preview-version", api(func(r *http.Request) (any, error) {
+		q := r.URL.Query()
+		return previewVersion(q.Get("id"), q.Get("mc"), q.Get("loader"))
+	}))
+
+	// ---------- undo ----------
+	mux.HandleFunc("/api/history", api(func(r *http.Request) (any, error) {
+		q := r.URL.Query()
+		t, err := loadTarget(q.Get("type"), q.Get("id"))
+		if err != nil {
+			return nil, err
+		}
+		return historyEntries(t), nil
+	}))
+	mux.HandleFunc("/api/rollback", api(func(r *http.Request) (any, error) {
+		var req struct {
+			Type string `json:"type"`
+			ID   string `json:"id"`
+		}
+		if err := readBody(r, &req); err != nil {
+			return nil, err
+		}
+		t, err := loadTarget(req.Type, req.ID)
+		if err != nil {
+			return nil, err
+		}
+		s, err := rollbackLast(t)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{"label": s.Label}, nil
+	}))
+
+	// ---------- worlds ----------
+	mux.HandleFunc("/api/worlds", api(func(r *http.Request) (any, error) {
+		in, err := loadInstance(r.URL.Query().Get("id"))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"worlds": listWorlds(in), "backupDir": filepath.Join(in.Dir, "craftkit-backups", "worlds"), "auto": getConfig().autoBackup()}, nil
+	}))
+	mux.HandleFunc("/api/worlds/backup", api(func(r *http.Request) (any, error) {
+		var req struct {
+			ID     string `json:"id"`
+			Folder string `json:"folder"`
+		}
+		if err := readBody(r, &req); err != nil {
+			return nil, err
+		}
+		in, err := loadInstance(req.ID)
+		if err != nil {
+			return nil, err
+		}
+		j := startJob("Welt sichern", func(j *Job) (any, error) { return backupWorld(j, in, req.Folder, false) })
+		return map[string]string{"job": j.ID}, nil
+	}))
+	mux.HandleFunc("/api/worlds/restore", api(func(r *http.Request) (any, error) {
+		var req struct {
+			ID     string `json:"id"`
+			Folder string `json:"folder"`
+			File   string `json:"file"`
+		}
+		if err := readBody(r, &req); err != nil {
+			return nil, err
+		}
+		in, err := loadInstance(req.ID)
+		if err != nil {
+			return nil, err
+		}
+		j := startJob("Welt wiederherstellen", func(j *Job) (any, error) { return nil, restoreWorld(j, in, req.Folder, req.File) })
+		return map[string]string{"job": j.ID}, nil
+	}))
+	mux.HandleFunc("/api/worlds/delete-backup", api(func(r *http.Request) (any, error) {
+		var req struct {
+			ID     string `json:"id"`
+			Folder string `json:"folder"`
+			File   string `json:"file"`
+		}
+		if err := readBody(r, &req); err != nil {
+			return nil, err
+		}
+		in, err := loadInstance(req.ID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]bool{"ok": true}, deleteWorldBackup(in, req.Folder, req.File)
 	}))
 
 	// ---------- self update ----------
@@ -844,3 +1020,10 @@ func registerRoutes(mux *http.ServeMux) {
 		return out, nil
 	}))
 }
+
+var (
+	exportsMu sync.Mutex
+	exports   = map[string]*ExportResult{}
+)
+
+func urlPathEscape(s string) string { return strings.ReplaceAll(url.PathEscape(s), "+", "%2B") }
