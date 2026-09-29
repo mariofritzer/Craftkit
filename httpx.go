@@ -19,6 +19,7 @@ import (
 )
 
 const appName = "CraftKit"
+
 // appVersion is set at build time by the release workflow: -X main.appVersion=1.2.3
 var appVersion = "dev"
 var userAgent = "CraftKit/" + appVersion + " (+https://github.com/mariofritzer/craftkit)"

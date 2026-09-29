@@ -17,6 +17,7 @@ type AdaptRequest struct {
 	LoaderVersion string   `json:"loaderVersion"`
 	Name          string   `json:"name"`
 	ServerMods    []string `json:"serverMods"` // mod ids reported by the server to install as well
+	CopySaves     bool     `json:"copySaves"`  // also copy worlds (for version upgrades)
 }
 
 type AdaptResult struct {
@@ -83,7 +84,12 @@ func adaptToServer(j *Job, req AdaptRequest) (*AdaptResult, error) {
 
 	if src != nil {
 		j.setStep("Übernehme Einstellungen …", -1)
-		for _, name := range []string{"options.txt", "optionsof.txt", "optionsshaders.txt", "servers.dat", "config", "resourcepacks", "shaderpacks", "schematics"} {
+		names := []string{"options.txt", "optionsof.txt", "optionsshaders.txt", "servers.dat", "config", "resourcepacks", "shaderpacks", "schematics"}
+		if req.CopySaves {
+			names = append(names, "saves")
+			j.logf("Kopiere Welten (die Originale bleiben unverändert) …")
+		}
+		for _, name := range names {
 			from := filepath.Join(src.Dir, name)
 			if !fileExists(from) {
 				continue
@@ -121,11 +127,19 @@ func adaptToServer(j *Job, req AdaptRequest) (*AdaptResult, error) {
 	var reqs []PlanRequest
 	var unknownFiles []string
 	if src != nil {
+		var skipped []string
 		for _, it := range src.Items {
-			if it.Explicit {
+			if it.Explicit && !it.Disabled {
 				reqs = append(reqs, PlanRequest{Source: it.Source, ProjectID: it.ProjectID})
+			} else if it.Explicit {
+				skipped = append(skipped, it.Name)
 			}
 		}
+		defer func() {
+			if res.Plan != nil && len(skipped) > 0 {
+				res.Plan.Warnings = append(res.Plan.Warnings, "Deaktiviert und daher nicht übernommen: "+strings.Join(skipped, ", ")+".")
+			}
+		}()
 		for _, f := range foreignFiles(filepath.Join(src.Dir, "mods"), src.Items) {
 			unknownFiles = append(unknownFiles, f)
 		}

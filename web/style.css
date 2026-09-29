@@ -325,3 +325,13 @@ h2 { font-size: 16px; margin: 0 0 12px; }
   .form-grid, .feature-grid { grid-template-columns: 1fr; }
   .cart-bar { max-width: calc(100% - 40px); }
 }
+
+/* ---------- toggle switch ---------- */
+.switch { position: relative; width: 34px; height: 20px; flex-shrink: 0; cursor: pointer; }
+.switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.switch span { position: absolute; inset: 0; background: var(--line-2); border-radius: 99px; transition: background .15s; }
+.switch span::after { content: ""; position: absolute; left: 3px; top: 3px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch input:checked + span { background: var(--green); }
+.switch input:checked + span::after { transform: translateX(14px); }
+.switch input:focus-visible + span { box-shadow: 0 0 0 3px var(--green-soft); }
+.row-off .mod-icon, .row-off .row-title, .row-off .row-meta { opacity: .5; }

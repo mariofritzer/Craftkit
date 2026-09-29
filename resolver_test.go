@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -199,5 +201,39 @@ func TestIncompatibleInstalledGetsReplaced(t *testing.T) {
 	}
 	if b == nil || b.Action != "update" || b.Version.ID != "b1" {
 		t.Fatalf("B (wrong MC version) must be replaced by b1: %+v", b)
+	}
+}
+
+func TestEnableDisable(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "a.jar"), []byte("x"), 0o644)
+	os.WriteFile(filepath.Join(dir, "foreign.jar"), []byte("y"), 0o644)
+	saved := 0
+	tg := &Target{Dir: dir, Items: map[string]*InstalledItem{
+		"m:A": {Key: "m:A", Name: "A", FileName: "a.jar"},
+	}, save: func() error { saved++; return nil }}
+	if err := setEnabled(tg, "m:A", "", false); err != nil {
+		t.Fatal(err)
+	}
+	if !fileExists(filepath.Join(dir, "a.jar.disabled")) || !tg.Items["m:A"].Disabled || saved != 1 {
+		t.Fatal("disable managed")
+	}
+	if err := setEnabled(tg, "m:A", "", true); err != nil || !fileExists(filepath.Join(dir, "a.jar")) {
+		t.Fatal("enable managed", err)
+	}
+	if err := setEnabled(tg, "", "foreign.jar", false); err != nil || !fileExists(filepath.Join(dir, "foreign.jar.disabled")) {
+		t.Fatal("disable foreign", err)
+	}
+	if err := setEnabled(tg, "", "foreign.jar.disabled", true); err != nil || !fileExists(filepath.Join(dir, "foreign.jar")) {
+		t.Fatal("enable foreign", err)
+	}
+	if err := setEnabled(tg, "", `..\x.jar`, true); err == nil {
+		t.Fatal("path traversal must fail")
+	}
+	// disabled jars do not provide dependencies
+	makeJar(t, filepath.Join(dir, "lib.jar.disabled"), map[string]string{"fabric.mod.json": `{"id":"lib","version":"1"}`})
+	makeJar(t, filepath.Join(dir, "user.jar"), map[string]string{"fabric.mod.json": `{"id":"user","version":"1","depends":{"lib":"*"}}`})
+	if m := missingDeps(scanFolder(dir), "mod"); len(m) != 1 || m[0].ModID != "lib" {
+		t.Fatalf("disabled dependency should count as missing: %+v", m)
 	}
 }

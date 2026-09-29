@@ -27,7 +27,8 @@ type InstalledItem struct {
 	VersionID     string   `json:"versionId"`
 	VersionNumber string   `json:"versionNumber"`
 	VersionDate   string   `json:"versionDate,omitempty"`
-	FileName      string   `json:"fileName"`
+	FileName      string   `json:"fileName"` // name of the jar (without ".disabled")
+	Disabled      bool     `json:"disabled,omitempty"`
 	Explicit      bool     `json:"explicit"`     // chosen by the user (not only pulled in as dependency)
 	Dependencies  []string `json:"dependencies"` // keys of required items
 	Incompatible  []string `json:"incompatible,omitempty"`
@@ -585,6 +586,7 @@ func foreignFiles(dir string, items map[string]*InstalledItem) []string {
 	known := map[string]bool{}
 	for _, it := range items {
 		known[strings.ToLower(it.FileName)] = true
+		known[strings.ToLower(it.FileName+".disabled")] = true
 	}
 	ents, _ := os.ReadDir(dir)
 	var out []string
@@ -600,4 +602,12 @@ func foreignFiles(dir string, items map[string]*InstalledItem) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// DiskName is the file name as it currently exists in the folder.
+func (it *InstalledItem) DiskName() string {
+	if it.Disabled {
+		return it.FileName + ".disabled"
+	}
+	return it.FileName
 }

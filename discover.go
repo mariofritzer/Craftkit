@@ -278,12 +278,14 @@ func identifyTarget(j *Job, t *Target) (*IdentifyResult, error) {
 	managed := map[string]bool{}
 	for _, it := range t.Items {
 		managed[strings.ToLower(it.FileName)] = true
+		managed[strings.ToLower(it.DiskName())] = true
 	}
 	var cands []*idCand
 	ents, _ := os.ReadDir(t.Dir)
 	for _, e := range ents {
 		n := e.Name()
-		if e.IsDir() || !strings.HasSuffix(strings.ToLower(n), ".jar") || managed[strings.ToLower(n)] {
+		ln := strings.ToLower(n)
+		if e.IsDir() || !(strings.HasSuffix(ln, ".jar") || strings.HasSuffix(ln, ".jar.disabled")) || managed[ln] {
 			continue
 		}
 		h, data, err := fileSHA1(filepath.Join(t.Dir, n))
@@ -426,6 +428,10 @@ func identifyTarget(j *Job, t *Target) (*IdentifyResult, error) {
 			continue
 		}
 		it.Explicit = !needed[it.Key]
+		if strings.HasSuffix(strings.ToLower(it.FileName), ".disabled") {
+			it.FileName = it.FileName[:len(it.FileName)-len(".disabled")]
+			it.Disabled = true
+		}
 		t.Items[it.Key] = it
 		res.Recognized = append(res.Recognized, it.Name)
 		j.logf("✓ erkannt: %s %s (%s)", it.Name, it.VersionNumber, sourceNames[it.Source])

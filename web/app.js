@@ -376,7 +376,7 @@ async function renderTarget(m, type, id, tab) {
     <div class="page-head">${headIco}
       <div class="grow"><h1>${esc(t.name)}</h1><div class="head-meta">${meta}</div></div>
       <div class="actions">
-        ${inst ? `<button class="btn btn-sm" id="tServer">🌐 Server</button>` : ""}
+        ${inst ? `<button class="btn btn-sm" id="tUpgrade" title="Neue Instanz mit anderer Minecraft-Version, Mods werden übernommen">⬆ Version wechseln</button><button class="btn btn-sm" id="tServer">🌐 Server</button>` : ""}
         <button class="btn btn-sm" id="tFolder">📁 Ordner</button>
         <button class="btn btn-sm" id="tUpdate" ${items.length ? "" : "disabled"}>↻ Alle aktualisieren</button>
         <button class="btn btn-sm" id="tEdit">Bearbeiten</button>
@@ -392,6 +392,7 @@ async function renderTarget(m, type, id, tab) {
   $$("[data-tab]").forEach(b => b.onclick = () => renderTarget(m, type, id, b.dataset.tab));
   $("#tFolder").onclick = () => api("/api/open-folder", { path: inst ? inst.dir : t.dir }).catch(e => toast(e.message, true));
   if (inst) $("#tServer").onclick = () => serverModal(inst);
+  if (inst) $("#tUpgrade").onclick = () => upgradeModal(inst);
   if (inst && inst.serverAddress) checkServerPill(inst);
   $("#tUpdate").onclick = () => makePlan({ type, id }, [], true);
   $("#tEdit").onclick = () => inst ? instanceSettingsModal(inst) : renderNewPluginFolder(m, pf);
@@ -406,11 +407,12 @@ function renderVanilla(m, inst) {
   m.innerHTML = `<div class="main-inner">
     <div class="page-head"><div class="head-ico ld-vanilla">🌱</div>
       <div class="grow"><h1>${esc(inst.name)}</h1><div class="head-meta"><span class="pill">Vanilla</span><span class="pill">Minecraft ${esc(inst.mcVersion)}</span><span class="pill pill-green"><span class="dot"></span>Profil: ${esc(inst.name)} (CraftKit)</span></div></div>
-      <div class="actions"><button class="btn btn-sm" id="vSrv">🌐 Server</button><button class="btn btn-sm" id="vEdit">Bearbeiten</button><button class="btn btn-sm btn-danger" id="vDel">Löschen</button></div></div>
+      <div class="actions"><button class="btn btn-sm" id="vUp">⬆ Version wechseln</button><button class="btn btn-sm" id="vSrv">🌐 Server</button><button class="btn btn-sm" id="vEdit">Bearbeiten</button><button class="btn btn-sm btn-danger" id="vDel">Löschen</button></div></div>
     <div class="banner banner-info"><span class="b-ico">ℹ</span><div>Vanilla-Instanzen laden keine Mods. Wenn du Mods willst, leg eine neue Instanz mit Fabric, Forge, NeoForge oder Quilt an. Die Spieldateien lädt der Minecraft Launcher beim ersten Start.</div></div>
     <button class="btn btn-primary" id="vNew">+ Neue Instanz mit Mod-Loader</button></div>`;
   $("#vEdit").onclick = () => instanceSettingsModal(inst);
   $("#vSrv").onclick = () => serverModal(inst);
+  $("#vUp").onclick = () => upgradeModal(inst);
   $("#vDel").onclick = () => deleteInstanceModal(inst);
   $("#vNew").onclick = () => { W.mc = inst.mcVersion; go({ type: "new" }); };
 }
@@ -428,10 +430,12 @@ function renderInstalled(body, t, items, foreign) {
   const row = it => {
     const nb = neededBy(it.key);
     const deps = (it.dependencies || []).map(k => byKey[k]?.name).filter(Boolean);
-    return `<div class="row">
+    return `<div class="row ${it.disabled ? "row-off" : ""}">
+      ${toggleHTML(!it.disabled, `data-tkey="${esc(it.key)}"`)}
       ${iconHTML(it.iconUrl, it.name)}
       <div class="grow">
         <div class="row-title">${esc(it.name)}
+          ${it.disabled ? `<span class="pill">deaktiviert</span>` : ""}
           ${!it.explicit ? `<span class="pill pill-blue" title="Automatisch als Voraussetzung installiert">Abhängigkeit</span>` : ""}
           <span class="pill">${esc(SOURCES[it.source])}</span></div>
         <div class="row-meta"><span class="mono">${esc(it.versionNumber)}</span> · ${esc(it.fileName)}
@@ -450,12 +454,14 @@ function renderInstalled(body, t, items, foreign) {
     ${auto.length ? `<div class="section-label">Automatisch mitinstalliert · ${auto.length}</div><div class="card list">${auto.map(row).join("")}</div>` : ""}
     ${foreign.length ? `<div class="section-label" style="display:flex;align-items:center;gap:10px">Nicht über CraftKit installiert · ${foreign.length}
         <span style="flex:1"></span><button class="btn btn-sm" id="btnIdentify" title="Sucht die Dateien per Prüfsumme auf Modrinth und CurseForge">🔎 Online erkennen</button></div>
-      <div class="card list">${foreign.map(f => `<div class="row">${iconHTML("", f.name)}<div class="grow">
+      <div class="card list">${foreign.map(f => `<div class="row ${f.disabled ? "row-off" : ""}">${toggleHTML(!f.disabled, `data-tfile="${esc(f.file)}"`)}${iconHTML("", f.name)}<div class="grow">
         <div class="row-title">${esc(f.name)}${f.disabled ? `<span class="pill">deaktiviert</span>` : ""}${loaderMismatch(f) ? `<span class="pill pill-red" title="Diese Datei ist für einen anderen Loader">für ${esc(loaderLabel(f.loader))}</span>` : ""}</div>
         <div class="row-meta">${f.version ? `<span class="mono">${esc(f.version)}</span> · ` : ""}${esc(f.file)}${(f.depends || []).length ? " · braucht " + esc(f.depends.filter(d => !["minecraft", "java", "fabricloader", "forge", "neoforge", "quilt_loader"].includes(d)).join(", ") || "–") : ""}</div></div>
         <button class="btn btn-sm btn-danger" data-foreign="${esc(f.file)}">Löschen</button></div>`).join("")}</div>
       <div class="muted" style="font-size:12.5px;margin-top:6px">Erkannte Dateien werden danach wie eigene Installationen verwaltet: mit Updates und Abhängigkeitsprüfung.</div>` : ""}`;
   $$("[data-remove]", body).forEach(b => b.onclick = () => removeFlow(t, byKey[b.dataset.remove]));
+  $$("[data-tkey]", body).forEach(b => b.onchange = () => toggleFlow(t, { key: b.dataset.tkey, name: byKey[b.dataset.tkey].name }, b.checked, b));
+  $$("[data-tfile]", body).forEach(b => b.onchange = () => toggleFlow(t, { file: b.dataset.tfile, name: b.dataset.tfile }, b.checked, b));
   $$("[data-foreign]", body).forEach(b => b.onclick = () => confirmModal("Datei löschen?", `„${esc(b.dataset.foreign)}“ wird aus dem Ordner gelöscht.`, "Löschen", async () => {
     await api("/api/remove-foreign", { type: t.type, id: t.id, file: b.dataset.foreign });
     renderTarget($("#main"), t.type, t.id, "installed");
@@ -491,6 +497,30 @@ function missingBanner(miss) {
     <ul style="margin:6px 0 0;padding-left:18px">${miss.map(m => `<li><b>${esc(m.name || m.modId)}</b>${m.name && m.name.toLowerCase() !== m.modId.toLowerCase() ? ` <span class="mono muted">(${esc(m.modId)})</span>` : ""} – benötigt von ${esc(m.neededBy.join(", "))}${m.projectId ? "" : ` <span class="muted">· nicht automatisch gefunden</span>`}</li>`).join("")}</ul>
     ${fixable.length ? `<button class="btn btn-sm btn-primary" style="margin-top:10px" data-fixmissing>Fehlende installieren (${fixable.length})</button>` : ""}
   </div></div>`;
+}
+
+function toggleHTML(on, attr) {
+  return `<label class="switch" title="${on ? "Aktiv – klicken zum Deaktivieren" : "Deaktiviert – klicken zum Aktivieren"}"><input type="checkbox" ${on ? "checked" : ""} ${attr}><span></span></label>`;
+}
+
+async function toggleFlow(t, what, enabled, box) {
+  const doIt = async () => {
+    await api("/api/toggle", { type: t.type, id: t.id, key: what.key || "", file: what.file || "", enabled });
+    toast(`„${what.name}“ ${enabled ? "aktiviert" : "deaktiviert"}.`);
+    await refreshState();
+    renderTarget($("#main"), t.type, t.id, "installed");
+  };
+  try {
+    if (!enabled && what.key) {
+      const chk = await api(`/api/remove-check?type=${t.type}&id=${encodeURIComponent(t.id)}&key=${encodeURIComponent(what.key)}`);
+      if ((chk.dependents || []).length) {
+        box.checked = true;
+        confirmModal("Trotzdem deaktivieren?", `<div class="banner banner-warn"><span class="b-ico">⚠</span><div><b>${esc(chk.dependents.join(", "))}</b> ${chk.dependents.length === 1 ? "benötigt" : "benötigen"} „${esc(what.name)}“ und ${chk.dependents.length === 1 ? "startet" : "starten"} ohne sie vermutlich nicht.</div></div>`, "Deaktivieren", doIt);
+        return;
+      }
+    }
+    await doIt();
+  } catch (e) { box.checked = !enabled; toast(e.message, true); }
 }
 
 async function removeFlow(t, it) {
@@ -1013,6 +1043,69 @@ async function serverModal(inst) {
   $("#sPing", md).onclick = doPing;
   $("#sAddr", md).onkeydown = e => { if (e.key === "Enter") doPing(); };
   if (inst?.serverAddress) doPing(); else $("#sAddr", md).focus();
+}
+
+// ---------- move an instance to another Minecraft version ----------
+function cmpMC(a, b) {
+  const pa = a.split(/[.-]/).map(n => parseInt(n) || 0), pb = b.split(/[.-]/).map(n => parseInt(n) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0); }
+  return 0;
+}
+
+async function upgradeModal(inst) {
+  const mods = Object.values(inst.mods || {}).filter(m => m.explicit);
+  const md = modal(`<div class="modal-head"><div style="flex:1"><h2>⬆ Auf andere Minecraft-Version wechseln</h2>
+      <div class="sub">CraftKit legt eine neue Instanz an und übernimmt ${mods.length ? `deine ${mods.length} Mods in der jeweils passenden Version (samt Abhängigkeiten), ` : ""}Einstellungen und Ressourcenpakete. „${esc(inst.name)}“ bleibt unverändert.</div></div></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="field"><label>Neue Minecraft-Version</label><select class="input" id="uMc"><option>Lade …</option></select></div>
+        <div class="field"><label>Loader</label><select class="input" id="uLoader">${Object.entries(LOADERS).map(([k, l]) => `<option value="${k}" ${k === inst.loader ? "selected" : ""}>${l.name}</option>`).join("")}</select>
+          <span class="hint">Beim Wechsel des Loaders werden nur Mods übernommen, die es auch dafür gibt.</span></div>
+      </div>
+      <label class="check" style="margin-top:14px"><input type="checkbox" id="uSaves"> Welten mitnehmen (als Kopie)</label>
+      <div id="uWarn" style="margin-top:12px"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>Abbrechen</button><button class="btn btn-primary" id="uGo" disabled>Neue Instanz anlegen</button></div>`, true);
+  const loadVersions = async () => {
+    const loader = $("#uLoader", md).value;
+    $("#uMc", md).innerHTML = `<option>Lade …</option>`;
+    $("#uGo", md).disabled = true;
+    try {
+      const list = await api(`/api/game-versions?loader=${loader}&snapshots=${S.state.config.showSnapshots ? 1 : 0}`);
+      const newer = list.filter(v => cmpMC(v.id, inst.mcVersion) > 0);
+      const def = (newer[0] || list[0]).id;
+      $("#uMc", md).innerHTML = list.map(v => `<option value="${esc(v.id)}" ${v.id === def ? "selected" : ""}>${esc(v.id)}${v.id === inst.mcVersion ? "  (aktuell)" : ""}</option>`).join("");
+      $("#uGo", md).disabled = false;
+      warn();
+    } catch (e) { $("#uWarn", md).innerHTML = `<div class="banner banner-err" style="margin:0"><span class="b-ico">✕</span><div>${esc(e.message)}</div></div>`; }
+  };
+  const warn = () => {
+    const mc = $("#uMc", md).value, same = mc === inst.mcVersion && $("#uLoader", md).value === inst.loader;
+    const older = cmpMC(mc, inst.mcVersion) < 0;
+    let h = "";
+    if (same) h += `<div class="banner banner-info" style="margin:0 0 8px"><span class="b-ico">ℹ</span><div>Das ist die aktuelle Version – es entsteht eine Kopie der Instanz.</div></div>`;
+    if (older) h += `<div class="banner banner-warn" style="margin:0 0 8px"><span class="b-ico">⚠</span><div>Das ist eine <b>ältere</b> Version. Welten aus neueren Versionen können darin beschädigt werden – nimm sie besser nicht mit.</div></div>`;
+    if ($("#uSaves", md).checked) h += `<div class="banner banner-info" style="margin:0"><span class="b-ico">ℹ</span><div>Die Welten werden kopiert. Sobald du eine Kopie in der neuen Version öffnest, wird sie umgewandelt – die Originale in „${esc(inst.name)}“ bleiben unberührt.</div></div>`;
+    $("#uWarn", md).innerHTML = h;
+  };
+  $("#uLoader", md).onchange = loadVersions;
+  $("#uMc", md).onchange = warn;
+  $("#uSaves", md).onchange = warn;
+  $("#uGo", md).onclick = async () => {
+    const mc = $("#uMc", md).value, loader = $("#uLoader", md).value;
+    try {
+      const { job } = await api("/api/server/adapt", { sourceId: inst.id, mcVersion: mc, loader, copySaves: $("#uSaves", md).checked });
+      closeModal(md);
+      jobModal(job, `Instanz für ${loaderLabel(loader)} ${mc} wird angelegt`, async (res, jmd) => {
+        await refreshState();
+        if (res?.plan) closeModal(jmd);
+        const id = res?.instance?.id;
+        if (id) go({ type: "instance", id });
+        if (res?.plan && (res.plan.items?.length || res.plan.errors?.length || res.plan.warnings?.length)) planModal(res.plan, { type: "instance", id }, [], false);
+      });
+    } catch (e) { toast(e.message, true); }
+  };
+  loadVersions();
 }
 
 async function checkServerPill(inst) {

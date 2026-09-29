@@ -308,7 +308,7 @@ func registerRoutes(mux *http.ServeMux) {
 			if t.Items != nil {
 				managed := false
 				for _, it := range t.Items {
-					if strings.EqualFold(it.FileName, ji.File) {
+					if strings.EqualFold(it.FileName, ji.File) || strings.EqualFold(it.DiskName(), ji.File) {
 						managed = true
 					}
 				}
@@ -462,6 +462,23 @@ func registerRoutes(mux *http.ServeMux) {
 		}
 		removed, err := removeItem(t, req.Key, req.WithOrphans)
 		return map[string]any{"removed": removed}, err
+	}))
+	mux.HandleFunc("/api/toggle", api(func(r *http.Request) (any, error) {
+		var req struct {
+			Type    string `json:"type"`
+			ID      string `json:"id"`
+			Key     string `json:"key"`
+			File    string `json:"file"`
+			Enabled bool   `json:"enabled"`
+		}
+		if err := readBody(r, &req); err != nil {
+			return nil, err
+		}
+		t, err := loadTarget(req.Type, req.ID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]bool{"ok": true}, setEnabled(t, req.Key, req.File, req.Enabled)
 	}))
 	mux.HandleFunc("/api/remove-foreign", api(func(r *http.Request) (any, error) {
 		var req struct {

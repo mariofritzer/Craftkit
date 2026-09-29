@@ -297,6 +297,10 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 			item.Action = "keep"
 			item.Version = &ModVersion{ID: installed.VersionID, Number: installed.VersionNumber}
 			item.Note = "bereits installiert"
+			if installed.Disabled {
+				item.Note = "installiert, aber deaktiviert"
+				plan.Warnings = append(plan.Warnings, fmt.Sprintf("„%s“ ist deaktiviert, wird aber von „%s“ benötigt – bitte wieder aktivieren.", installed.Name, q.requiredBy))
+			}
 			byKey[key] = item
 			plan.Items = append(plan.Items, item)
 			continue
@@ -515,14 +519,21 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 			continue
 		}
 		prev := t.Items[it.Key]
-		if prev != nil && prev.FileName != "" && !strings.EqualFold(prev.FileName, name) {
-			os.Remove(filepath.Join(t.Dir, prev.FileName))
+		disabled := prev != nil && prev.Disabled
+		if disabled {
+			// keep a disabled mod disabled after an update
+			if err := os.Rename(dest, dest+".disabled"); err != nil {
+				disabled = false
+			}
+		}
+		if prev != nil && prev.FileName != "" && !strings.EqualFold(prev.DiskName(), name) && !(disabled && strings.EqualFold(prev.DiskName(), name+".disabled")) {
+			os.Remove(filepath.Join(t.Dir, prev.DiskName()))
 		}
 		explicit := it.Explicit || (prev != nil && prev.Explicit)
 		t.Items[it.Key] = &InstalledItem{
 			Key: it.Key, Source: it.Source, ProjectID: it.ProjectID, Slug: it.Slug, Name: it.Name,
 			IconURL: it.IconURL, PageURL: it.PageURL, VersionID: it.Version.ID, VersionNumber: it.Version.Number,
-			VersionDate: it.Version.Date, FileName: name, Explicit: explicit, Dependencies: it.Dependencies,
+			VersionDate: it.Version.Date, FileName: name, Disabled: disabled, Explicit: explicit, Dependencies: it.Dependencies,
 			Incompatible: it.Incompatible,
 			InstalledAt:  time.Now().Format(time.RFC3339),
 		}
@@ -616,7 +627,7 @@ func removeItem(t *Target, key string, withOrphans bool) ([]string, error) {
 	var removed []string
 	for _, v := range victims {
 		if v.FileName != "" {
-			p := filepath.Join(t.Dir, v.FileName)
+			p := filepath.Join(t.Dir, v.DiskName())
 			if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 				return removed, fmt.Errorf("%s konnte nicht gelöscht werden (läuft Minecraft noch?): %w", v.FileName, err)
 			}
@@ -625,4 +636,40 @@ func removeItem(t *Target, key string, withOrphans bool) ([]string, error) {
 		removed = append(removed, v.Name)
 	}
 	return removed, t.save()
+}
+
+// setEnabled enables or disables a managed item (key) or any jar in the folder (file).
+func setEnabled(t *Target, key, file string, enabled bool) error {
+	instMu.Lock()
+	defer instMu.Unlock()
+	if key != "" {
+		it := t.Items[key]
+		if it == nil {
+			return fmt.Errorf("nicht installiert")
+		}
+		if it.Disabled == !enabled {
+			return nil
+		}
+		from := filepath.Join(t.Dir, it.DiskName())
+		it.Disabled = !enabled
+		to := filepath.Join(t.Dir, it.DiskName())
+		if err := os.Rename(from, to); err != nil {
+			it.Disabled = enabled
+			return fmt.Errorf("%s konnte nicht umbenannt werden (läuft Minecraft noch?): %w", filepath.Base(from), err)
+		}
+		return t.save()
+	}
+	name := safeFileName(file)
+	if name != file {
+		return fmt.Errorf("ungültiger Dateiname")
+	}
+	base := strings.TrimSuffix(name, ".disabled")
+	from, to := filepath.Join(t.Dir, base+".disabled"), filepath.Join(t.Dir, base)
+	if !enabled {
+		from, to = to, from
+	}
+	if err := os.Rename(from, to); err != nil {
+		return fmt.Errorf("%s konnte nicht umbenannt werden (läuft Minecraft noch?): %w", filepath.Base(from), err)
+	}
+	return nil
 }
