@@ -371,3 +371,5 @@ details.ver summary { padding: 8px 12px; cursor: pointer; }
 .kind-missing, .kind-incompatible { border-left: 3px solid var(--red); }
 .kind-suspect, .kind-mixin { border-left: 3px solid var(--gold); }
 .kind-memory, .kind-java { border-left: 3px solid var(--blue); }
+.pin-pill { border: none; cursor: pointer; }
+.pin-pill:hover { background: var(--gold-soft); color: var(--gold); }

@@ -239,3 +239,24 @@ func TestEnableDisable(t *testing.T) {
 }
 
 func init() { inUnitTest = true }
+
+func TestPinAndDowngrade(t *testing.T) {
+	f := newFake()
+	f.versions["C"] = append(f.versions["C"], ver("C", "c0", "2023-12-01", "1.20.1"))
+	r := &resolver{provider: func(string) (Provider, error) { return f, nil }, projects: map[string]*Project{}}
+	tg := testTarget()
+	// downgrade C (installed c1, 2024-01-01) to c0 and pin it
+	plan := r.resolve(tg, []PlanRequest{{Source: "modrinth", ProjectID: "C", VersionID: "c0", Pin: true}})
+	c := plan.Items[0]
+	if c.Action != "update" || !c.Downgrade || !c.Pin || c.Version.ID != "c0" {
+		t.Fatalf("downgrade item: %+v", c)
+	}
+	// a pinned item is not touched by "update all"
+	tg.Items["modrinth:C"].Pinned = true
+	tg.Items["modrinth:C"].VersionID = "c0"
+	tg.Items["modrinth:C"].VersionDate = "2023-12-01"
+	plan = r.resolveUpdateAll(tg, []PlanRequest{{Source: "modrinth", ProjectID: "C"}})
+	if plan.Items[0].Action != "keep" {
+		t.Fatalf("pinned item must be kept: %+v", plan.Items[0])
+	}
+}

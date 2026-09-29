@@ -9,7 +9,7 @@ const LANGS = {
   nl: "Nederlands", tr: "Türkçe", ru: "Русский", uk: "Українська", "zh-CN": "简体中文", ja: "日本語", ko: "한국어",
 };
 let LANG = "de", DICT = {};
-function t(key, ...args) {
+function tr(key, ...args) {
   const s = DICT[key] ?? key;
   return args.length ? s.replace(/\{(\d+)\}/g, (m, i) => (args[+i] ?? m)) : s;
 }
@@ -32,17 +32,17 @@ async function loadLang(lang) {
   }
   document.documentElement.lang = lang;
   // static texts in index.html
-  $$("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
-  $$("[data-i18n-title]").forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  $$("[data-i18n]").forEach(el => { el.textContent = tr(el.dataset.i18n); });
+  $$("[data-i18n-title]").forEach(el => { el.title = tr(el.dataset.i18nTitle); });
 }
 function locale() { return { de: "de-AT", en: "en-GB", "pt-BR": "pt-BR", "zh-CN": "zh-CN" }[LANG] || LANG; }
 
 const LOADERS = {
-  vanilla:  { name: "Vanilla",  ico: "🌱", get desc() { return t("Unverändertes Minecraft, keine Mods."); } },
-  fabric:   { name: "Fabric",   ico: "🧵", get desc() { return t("Leicht und schnell, riesige Auswahl für neue Versionen."); } },
-  forge:    { name: "Forge",    ico: "⚒",  get desc() { return t("Der Klassiker, viele große Mods und Modpacks."); } },
-  neoforge: { name: "NeoForge", ico: "🔥", get desc() { return t("Moderner Forge-Nachfolger ab Minecraft 1.20.2."); } },
-  quilt:    { name: "Quilt",    ico: "🧶", get desc() { return t("Fabric-Ableger, lädt auch die meisten Fabric-Mods."); } },
+  vanilla:  { name: "Vanilla",  ico: "🌱", get desc() { return tr("Unverändertes Minecraft, keine Mods."); } },
+  fabric:   { name: "Fabric",   ico: "🧵", get desc() { return tr("Leicht und schnell, riesige Auswahl für neue Versionen."); } },
+  forge:    { name: "Forge",    ico: "⚒",  get desc() { return tr("Der Klassiker, viele große Mods und Modpacks."); } },
+  neoforge: { name: "NeoForge", ico: "🔥", get desc() { return tr("Moderner Forge-Nachfolger ab Minecraft 1.20.2."); } },
+  quilt:    { name: "Quilt",    ico: "🧶", get desc() { return tr("Fabric-Ableger, lädt auch die meisten Fabric-Mods."); } },
 };
 const PLATFORMS = {
   paper: "Paper", purpur: "Purpur", spigot: "Spigot", bukkit: "Bukkit", folia: "Folia",
@@ -58,7 +58,7 @@ const S = {
   source: "modrinth",
 };
 
-const KIND_NOUN = { get mod() { return t("Mods"); }, get plugin() { return t("Plugins"); }, get resourcepack() { return t("Ressourcenpakete"); }, get shader() { return t("Shader"); } };
+const KIND_NOUN = { get mod() { return tr("Mods"); }, get plugin() { return tr("Plugins"); }, get resourcepack() { return tr("Ressourcenpakete"); }, get shader() { return tr("Shader"); } };
 const KIND_EXAMPLE = { mod: "Sodium, JEI, Create", plugin: "EssentialsX, LuckPerms", resourcepack: "Faithful, Fresh Animations", shader: "Complementary, BSL, Solas" };
 
 // ---------- helpers ----------
@@ -76,7 +76,7 @@ async function api(path, body) {
   }
   let res;
   try { res = await fetch(path, opts); }
-  catch (e) { throw new Error(t("CraftKit ist nicht mehr erreichbar – bitte neu starten.")); }
+  catch (e) { throw new Error(tr("CraftKit ist nicht mehr erreichbar – bitte neu starten.")); }
   const txt = await res.text();
   let data = null;
   try { data = txt ? JSON.parse(txt) : null; } catch { data = null; }
@@ -104,7 +104,7 @@ function iconHTML(url, name, cls = "mod-icon") {
   if (url) return `<img class="${cls}" src="${esc(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'${cls}',textContent:'${esc((name || "?")[0]).toUpperCase()}'}))">`;
   return `<div class="${cls}">${esc((name || "?")[0].toUpperCase())}</div>`;
 }
-function loading(text) { return `<div class="loading"><span class="spinner"></span>${esc(text || t("Lade …"))}</div>`; }
+function loading(text) { return `<div class="loading"><span class="spinner"></span>${esc(text || tr("Lade …"))}</div>`; }
 function openExternal(url) { api("/api/open-url", { url }).catch(e => toast(e.message, true)); }
 document.addEventListener("click", e => {
   const a = e.target.closest("a[data-ext]");
@@ -130,9 +130,9 @@ async function refreshState() {
 function renderTopStatus() {
   const st = S.state;
   const parts = [];
-  if (st.launcherRunning) parts.push(`<span class="pill pill-gold" title="${esc(t("Neue Profile erscheinen erst nach einem Neustart des Launchers"))}"><span class="dot"></span>${esc(t("Launcher läuft"))}</span>`);
-  if (S.update?.available) parts.push(`<button class="pill pill-green" id="updPill" style="border:none;cursor:pointer" title="${esc(t("Update installieren"))}">⬆ ${esc(t("Update {0}", S.update.latest))}</button>`);
-  if (!st.launcherLabel) parts.push(`<span class="pill pill-red" title="${esc(t("Pfad in den Einstellungen angeben"))}"><span class="dot"></span>${esc(t("Launcher nicht gefunden"))}</span>`);
+  if (st.launcherRunning) parts.push(`<span class="pill pill-gold" title="${esc(tr("Neue Profile erscheinen erst nach einem Neustart des Launchers"))}"><span class="dot"></span>${esc(tr("Launcher läuft"))}</span>`);
+  if (S.update?.available) parts.push(`<button class="pill pill-green" id="updPill" style="border:none;cursor:pointer" title="${esc(tr("Update installieren"))}">⬆ ${esc(tr("Update {0}", S.update.latest))}</button>`);
+  if (!st.launcherLabel) parts.push(`<span class="pill pill-red" title="${esc(tr("Pfad in den Einstellungen angeben"))}"><span class="dot"></span>${esc(tr("Launcher nicht gefunden"))}</span>`);
   $("#topStatus").innerHTML = parts.join("");
   if ($("#updPill")) $("#updPill").onclick = updateModal;
 }
@@ -145,24 +145,24 @@ function renderSidebar() {
     <button class="side-item ${v.type === "instance" && v.id === i.id ? "active" : ""}" data-inst="${esc(i.id)}">
       <span class="side-ico ld-${esc(i.loader)}">${LOADERS[i.loader]?.ico || "?"}</span>
       <span class="side-text"><div class="side-title">${esc(i.name)}</div>
-      <div class="side-meta">${esc(LOADERS[i.loader]?.name)} · ${esc(i.mcVersion)}${i.loader !== "vanilla" ? " · " + esc(t("{0} Mods", i.modCount)) : ""}</div></span>
+      <div class="side-meta">${esc(LOADERS[i.loader]?.name)} · ${esc(i.mcVersion)}${i.loader !== "vanilla" ? " · " + esc(tr("{0} Mods", i.modCount)) : ""}</div></span>
       ${updBadge("instance:" + i.id)}
-    </button>`).join("") : `<div class="side-empty">${esc(t("Noch keine Instanz. Klick auf +."))}</div>`;
+    </button>`).join("") : `<div class="side-empty">${esc(tr("Noch keine Instanz. Klick auf +."))}</div>`;
   const pfs = st.pluginFolders || [];
   $("#pluginList").innerHTML = pfs.length ? pfs.map(p => `
     <button class="side-item ${v.type === "plugins" && v.id === p.id ? "active" : ""}" data-pf="${esc(p.id)}">
       <span class="side-ico ld-plugin">🔌</span>
       <span class="side-text"><div class="side-title">${esc(p.name)}</div>
-      <div class="side-meta">${esc(PLATFORMS[p.platform] || p.platform)}${p.mcVersion ? " · " + esc(p.mcVersion) : ""} · ${esc(t("{0} Plugins", p.count))}</div></span>
+      <div class="side-meta">${esc(PLATFORMS[p.platform] || p.platform)}${p.mcVersion ? " · " + esc(p.mcVersion) : ""} · ${esc(tr("{0} Plugins", p.count))}</div></span>
       ${updBadge("plugins:" + p.id)}
-    </button>`).join("") : `<div class="side-empty">${esc(t("Kein Plugin-Ordner. Klick auf +."))}</div>`;
+    </button>`).join("") : `<div class="side-empty">${esc(tr("Kein Plugin-Ordner. Klick auf +."))}</div>`;
   const found = (S.discover?.profiles || []).filter(p => !p.instanceId);
   $("#foundSection").classList.toggle("hidden", !found.length);
   $("#foundList").innerHTML = found.map(p => `
     <button class="side-item ${v.type === "found" && v.id === p.key ? "active" : ""}" data-found="${esc(p.key)}">
       <span class="side-ico ${LOADERS[p.loader] ? "ld-" + esc(p.loader) : ""}">${LOADERS[p.loader]?.ico || "◇"}</span>
       <span class="side-text"><div class="side-title">${esc(p.name)}</div>
-      <div class="side-meta">${esc(loaderLabel(p.loader))}${p.mcVersion ? " · " + esc(p.mcVersion) : ""}${p.modCount ? " · " + esc(t("{0} Mods", p.modCount)) : ""}</div></span>
+      <div class="side-meta">${esc(loaderLabel(p.loader))}${p.mcVersion ? " · " + esc(p.mcVersion) : ""}${p.modCount ? " · " + esc(tr("{0} Mods", p.modCount)) : ""}</div></span>
     </button>`).join("");
   $$("[data-found]").forEach(b => b.onclick = () => go({ type: "found", id: b.dataset.found }));
   $$("[data-inst]").forEach(b => b.onclick = () => go({ type: "instance", id: b.dataset.inst }));
@@ -172,11 +172,11 @@ function renderSidebar() {
 
 function updBadge(key) {
   const u = S.updates?.targets?.[key];
-  return u && u.count ? `<span class="upd-badge" title="${esc(t("{0} Update(s) verfügbar", u.count))}">↑${u.count}</span>` : "";
+  return u && u.count ? `<span class="upd-badge" title="${esc(tr("{0} Update(s) verfügbar", u.count))}">↑${u.count}</span>` : "";
 }
 
 function loaderLabel(l) {
-  return LOADERS[l]?.name || (l === "optifine" ? "OptiFine" : t("Unbekannt"));
+  return LOADERS[l]?.name || (l === "optifine" ? "OptiFine" : tr("Unbekannt"));
 }
 
 function go(view) {
@@ -207,20 +207,20 @@ function render() {
 function renderWelcome(m) {
   const st = S.state;
   m.innerHTML = `<div class="main-inner">
-    ${!st.minecraftFound ? `<div class="banner banner-warn"><span class="b-ico">⚠</span><div>${t("Kein Minecraft-Ordner unter {0} gefunden. Starte den offiziellen Launcher einmal oder passe den Pfad in den Einstellungen an.", `<span class="mono">${esc(st.config.minecraftDir)}</span>`)}</div></div>` : ""}
+    ${!st.minecraftFound ? `<div class="banner banner-warn"><span class="b-ico">⚠</span><div>${tr("Kein Minecraft-Ordner unter {0} gefunden. Starte den offiziellen Launcher einmal oder passe den Pfad in den Einstellungen an.", `<span class="mono">${esc(st.config.minecraftDir)}</span>`)}</div></div>` : ""}
     <div class="hero">
-      <h1>${esc(t("Minecraft einrichten, ohne Dateien zu schieben."))}</h1>
-      <p>${esc(t("CraftKit installiert Minecraft-Versionen mit Forge, NeoForge, Fabric oder Quilt, lädt Mods und Plugins von Modrinth und CurseForge und nimmt alle Voraussetzungen automatisch mit. Gespielt wird wie gewohnt im offiziellen Launcher."))}</p>
+      <h1>${esc(tr("Minecraft einrichten, ohne Dateien zu schieben."))}</h1>
+      <p>${esc(tr("CraftKit installiert Minecraft-Versionen mit Forge, NeoForge, Fabric oder Quilt, lädt Mods und Plugins von Modrinth und CurseForge und nimmt alle Voraussetzungen automatisch mit. Gespielt wird wie gewohnt im offiziellen Launcher."))}</p>
       <div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
-        <button class="btn btn-primary" id="wNew">+ ${esc(t("Neue Instanz anlegen"))}</button>
-        <button class="btn" id="wPack">📦 ${esc(t("Modpack installieren"))}</button>
-        <button class="btn" id="wSrv">🌐 ${esc(t("Für einen Server einrichten"))}</button>
-        <button class="btn" id="wPf">${esc(t("Plugin-Ordner hinzufügen"))}</button>
+        <button class="btn btn-primary" id="wNew">+ ${esc(tr("Neue Instanz anlegen"))}</button>
+        <button class="btn" id="wPack">📦 ${esc(tr("Modpack installieren"))}</button>
+        <button class="btn" id="wSrv">🌐 ${esc(tr("Für einen Server einrichten"))}</button>
+        <button class="btn" id="wPf">${esc(tr("Plugin-Ordner hinzufügen"))}</button>
       </div>
       <div class="feature-grid">
-        <div class="feature"><b>1 · ${esc(t("Version wählen"))}</b><span>${esc(t("Loader und Minecraft-Version aussuchen, CraftKit installiert alles und legt ein eigenes Profil an."))}</span></div>
-        <div class="feature"><b>2 · ${esc(t("Mods aussuchen"))}</b><span>${esc(t("Suchen, in den Korb legen, Abhängigkeiten werden vor der Installation angezeigt."))}</span></div>
-        <div class="feature"><b>3 · ${esc(t("Spielen"))}</b><span>${esc(t("„Minecraft Launcher öffnen“ drücken und dort das Profil der Instanz starten – neue Instanzen erkennst du an „(CraftKit)“ im Namen, übernommene behalten ihren Namen."))}</span></div>
+        <div class="feature"><b>1 · ${esc(tr("Version wählen"))}</b><span>${esc(tr("Loader und Minecraft-Version aussuchen, CraftKit installiert alles und legt ein eigenes Profil an."))}</span></div>
+        <div class="feature"><b>2 · ${esc(tr("Mods aussuchen"))}</b><span>${esc(tr("Suchen, in den Korb legen, Abhängigkeiten werden vor der Installation angezeigt."))}</span></div>
+        <div class="feature"><b>3 · ${esc(tr("Spielen"))}</b><span>${esc(tr("„Minecraft Launcher öffnen“ drücken und dort das Profil der Instanz starten – neue Instanzen erkennst du an „(CraftKit)“ im Namen, übernommene behalten ihren Namen."))}</span></div>
       </div>
     </div></div>`;
   $("#wNew").onclick = () => go({ type: "new" });
@@ -236,26 +236,26 @@ async function renderNewInstance(m) {
   if (S.view.mode === "pack") return renderModpacks(m);
   W.snapshots = S.state.config.showSnapshots;
   m.innerHTML = `<div class="main-inner">
-    <div class="page-head"><div class="grow"><h1>${esc(t("Neue Instanz"))}</h1>
-      <div class="sub">${esc(t("Jede Instanz hat einen eigenen Ordner für Mods, Welten und Einstellungen und erscheint als eigenes Profil im Minecraft Launcher."))}</div></div></div>
+    <div class="page-head"><div class="grow"><h1>${esc(tr("Neue Instanz"))}</h1>
+      <div class="sub">${esc(tr("Jede Instanz hat einen eigenen Ordner für Mods, Welten und Einstellungen und erscheint als eigenes Profil im Minecraft Launcher."))}</div></div></div>
     ${newTabs("new")}
-    ${S.state.launcherRunning ? `<div class="banner banner-warn"><span class="b-ico">⚠</span><div>${esc(t("Der Minecraft Launcher ist gerade offen. Schließ ihn am besten vorher, sonst taucht das neue Profil erst nach einem Neustart des Launchers auf."))}</div></div>` : ""}
-    <div class="step-title done"><span class="step-num">1</span>${esc(t("Loader"))}</div>
+    ${S.state.launcherRunning ? `<div class="banner banner-warn"><span class="b-ico">⚠</span><div>${esc(tr("Der Minecraft Launcher ist gerade offen. Schließ ihn am besten vorher, sonst taucht das neue Profil erst nach einem Neustart des Launchers auf."))}</div></div>` : ""}
+    <div class="step-title done"><span class="step-num">1</span>${esc(tr("Loader"))}</div>
     <div class="loader-grid" id="wLoaders"></div>
-    <div class="step-title"><span class="step-num">2</span>${esc(t("Version"))}</div>
+    <div class="step-title"><span class="step-num">2</span>${esc(tr("Version"))}</div>
     <div class="card card-pad"><div class="form-grid">
-      <div class="field"><label>${esc(t("Minecraft-Version"))}</label><select class="input" id="wMc"></select>
-        <label class="check" style="margin-top:4px"><input type="checkbox" id="wSnap"> ${esc(t("Snapshots & ältere Typen anzeigen"))}</label></div>
-      <div class="field" id="wLvField"><label id="wLvLabel">${esc(t("Loader-Version"))}</label><select class="input" id="wLv"></select><span class="hint" id="wLvHint"></span></div>
-      <div class="field"><label>${esc(t("Name"))}</label><input class="input" id="wName" maxlength="60" placeholder="${esc(t("z. B. Fabric 1.21 mit Freunden"))}"></div>
-      <div class="field"><label>${esc(t("Arbeitsspeicher (RAM)"))}</label>
+      <div class="field"><label>${esc(tr("Minecraft-Version"))}</label><select class="input" id="wMc"></select>
+        <label class="check" style="margin-top:4px"><input type="checkbox" id="wSnap"> ${esc(tr("Snapshots & ältere Typen anzeigen"))}</label></div>
+      <div class="field" id="wLvField"><label id="wLvLabel">${esc(tr("Loader-Version"))}</label><select class="input" id="wLv"></select><span class="hint" id="wLvHint"></span></div>
+      <div class="field"><label>${esc(tr("Name"))}</label><input class="input" id="wName" maxlength="60" placeholder="${esc(tr("z. B. Fabric 1.21 mit Freunden"))}"></div>
+      <div class="field"><label>${esc(tr("Arbeitsspeicher (RAM)"))}</label>
         <div class="range-row"><input type="range" id="wMem" min="0" max="16" step="1"><span class="range-val" id="wMemVal"></span></div>
-        <span class="hint">${esc(t("„Standard“ überlässt es dem Launcher. Für größere Modpacks 6–8 GB."))}</span></div>
+        <span class="hint">${esc(tr("„Standard“ überlässt es dem Launcher. Für größere Modpacks 6–8 GB."))}</span></div>
     </div></div>
     <div id="wErr"></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:18px">
-      <button class="btn btn-ghost" id="wCancel">${esc(t("Abbrechen"))}</button>
-      <button class="btn btn-primary" id="wCreate">${esc(t("Installieren & Profil anlegen"))}</button>
+      <button class="btn btn-ghost" id="wCancel">${esc(tr("Abbrechen"))}</button>
+      <button class="btn btn-primary" id="wCreate">${esc(tr("Installieren & Profil anlegen"))}</button>
     </div></div>`;
   $("#wLoaders").innerHTML = Object.entries(LOADERS).map(([k, l]) => `
     <button class="loader-card ${W.loader === k ? "active" : ""}" data-loader="${k}">
@@ -272,7 +272,7 @@ async function renderNewInstance(m) {
   $("#wLv").onchange = () => { W.lv = $("#wLv").value; };
   $("#wName").oninput = () => { W.nameTouched = true; };
   $("#wMem").value = W.memory;
-  const memLabel = () => $("#wMemVal").textContent = +$("#wMem").value === 0 ? t("Standard") : $("#wMem").value + " GB";
+  const memLabel = () => $("#wMemVal").textContent = +$("#wMem").value === 0 ? tr("Standard") : $("#wMem").value + " GB";
   $("#wMem").oninput = () => { W.memory = +$("#wMem").value; memLabel(); };
   memLabel();
   $("#wCancel").onclick = () => go({ type: "welcome" });
@@ -288,15 +288,15 @@ function suggestName() {
 
 async function loadMcVersions() {
   const sel = $("#wMc");
-  sel.innerHTML = `<option>${esc(t("Lade Versionen …"))}</option>`;
+  sel.innerHTML = `<option>${esc(tr("Lade Versionen …"))}</option>`;
   sel.disabled = true;
   $("#wErr").innerHTML = "";
   try {
     const list = await api(`/api/game-versions?loader=${W.loader}&snapshots=${W.snapshots ? 1 : 0}`);
-    if (!list || !list.length) throw new Error(t("Keine Versionen gefunden."));
+    if (!list || !list.length) throw new Error(tr("Keine Versionen gefunden."));
     const prev = W.mc;
     const have = new Set((S.discover?.versions || []).filter(x => x.loader === W.loader).map(x => x.mcVersion));
-    sel.innerHTML = list.map(v => `<option value="${esc(v.id)}">${esc(v.id)}${v.type !== "release" ? " (" + esc(v.type) + ")" : ""}${have.has(v.id) ? "  ✓ " + esc(t("installiert")) : ""}</option>`).join("");
+    sel.innerHTML = list.map(v => `<option value="${esc(v.id)}">${esc(v.id)}${v.type !== "release" ? " (" + esc(v.type) + ")" : ""}${have.has(v.id) ? "  ✓ " + esc(tr("installiert")) : ""}</option>`).join("");
     W.mc = list.some(v => v.id === prev) ? prev : list[0].id;
     sel.value = W.mc;
     sel.disabled = false;
@@ -304,7 +304,7 @@ async function loadMcVersions() {
     loadLoaderVersions();
   } catch (e) {
     sel.innerHTML = `<option>–</option>`;
-    $("#wErr").innerHTML = `<div class="banner banner-err" style="margin-top:14px"><span class="b-ico">✕</span><div>${esc(t("Versionen konnten nicht geladen werden: {0}", e.message))}</div></div>`;
+    $("#wErr").innerHTML = `<div class="banner banner-err" style="margin-top:14px"><span class="b-ico">✕</span><div>${esc(tr("Versionen konnten nicht geladen werden: {0}", e.message))}</div></div>`;
   }
 }
 
@@ -312,22 +312,22 @@ async function loadLoaderVersions() {
   const field = $("#wLvField");
   if (W.loader === "vanilla") { field.style.visibility = "hidden"; W.lv = ""; return; }
   field.style.visibility = "visible";
-  $("#wLvLabel").textContent = t("{0}-Version", LOADERS[W.loader].name);
+  $("#wLvLabel").textContent = tr("{0}-Version", LOADERS[W.loader].name);
   const sel = $("#wLv");
-  sel.innerHTML = `<option>${esc(t("Lade …"))}</option>`;
+  sel.innerHTML = `<option>${esc(tr("Lade …"))}</option>`;
   sel.disabled = true;
   $("#wLvHint").textContent = "";
   try {
     const list = await api(`/api/loader-versions?loader=${W.loader}&mc=${encodeURIComponent(W.mc)}`);
-    if (!list || !list.length) throw new Error(t("Keine {0}-Version für {1}.", LOADERS[W.loader].name, W.mc));
+    if (!list || !list.length) throw new Error(tr("Keine {0}-Version für {1}.", LOADERS[W.loader].name, W.mc));
     const haveLv = new Set((S.discover?.versions || []).filter(x => x.loader === W.loader && x.mcVersion === W.mc).map(x => x.loaderVersion));
     const isHave = v => haveLv.has(v.version) || (W.loader === "forge" && haveLv.has(v.version.split("-").slice(1).join("-")));
-    sel.innerHTML = list.map(v => `<option value="${esc(v.version)}">${esc(v.version)}${v.recommended ? "  ★ " + esc(t("empfohlen")) : ""}${!v.stable ? "  (Beta)" : ""}${isHave(v) ? "  ✓ " + esc(t("installiert")) : ""}</option>`).join("");
+    sel.innerHTML = list.map(v => `<option value="${esc(v.version)}">${esc(v.version)}${v.recommended ? "  ★ " + esc(tr("empfohlen")) : ""}${!v.stable ? "  (Beta)" : ""}${isHave(v) ? "  ✓ " + esc(tr("installiert")) : ""}</option>`).join("");
     const rec = list.find(v => v.recommended) || list[0];
     W.lv = rec.version;
     sel.value = W.lv;
     sel.disabled = false;
-    $("#wLvHint").textContent = t("{0} Versionen verfügbar, die empfohlene ist vorausgewählt.", list.length);
+    $("#wLvHint").textContent = tr("{0} Versionen verfügbar, die empfohlene ist vorausgewählt.", list.length);
   } catch (e) {
     sel.innerHTML = `<option>–</option>`;
     W.lv = "";
@@ -337,15 +337,15 @@ async function loadLoaderVersions() {
 
 async function createInstanceClicked() {
   const req = { name: $("#wName").value.trim(), mcVersion: W.mc, loader: W.loader, loaderVersion: W.lv, memoryGB: W.memory };
-  if (!req.mcVersion) return toast(t("Bitte eine Minecraft-Version wählen."), true);
-  if (req.loader !== "vanilla" && !req.loaderVersion) return toast(t("Bitte eine Loader-Version wählen."), true);
+  if (!req.mcVersion) return toast(tr("Bitte eine Minecraft-Version wählen."), true);
+  if (req.loader !== "vanilla" && !req.loaderVersion) return toast(tr("Bitte eine Loader-Version wählen."), true);
   try {
     const { job } = await api("/api/instances/create", req);
-    jobModal(job, t("{0} {1} wird installiert", LOADERS[req.loader].name, req.mcVersion), async (res) => {
+    jobModal(job, tr("{0} {1} wird installiert", LOADERS[req.loader].name, req.mcVersion), async (res) => {
       await refreshState();
       if (res && res.id) {
         go({ type: "instance", id: res.id });
-        toast(t("Fertig! Das Profil heißt im Launcher „{0}“.", res.name + " (CraftKit)"));
+        toast(tr("Fertig! Das Profil heißt im Launcher „{0}“.", res.name + " (CraftKit)"));
       }
     });
   } catch (e) { toast(e.message, true); }
@@ -353,8 +353,8 @@ async function createInstanceClicked() {
 
 function newTabs(active) {
   setTimeout(() => $$("[data-newtab]").forEach(b => b.onclick = () => go({ type: "new", mode: b.dataset.newtab })), 0);
-  return `<div class="tabs"><button class="tab ${active === "new" ? "active" : ""}" data-newtab="new">${esc(t("Selbst zusammenstellen"))}</button>
-    <button class="tab ${active === "pack" ? "active" : ""}" data-newtab="pack">📦 ${esc(t("Modpack"))}</button></div>`;
+  return `<div class="tabs"><button class="tab ${active === "new" ? "active" : ""}" data-newtab="new">${esc(tr("Selbst zusammenstellen"))}</button>
+    <button class="tab ${active === "pack" ? "active" : ""}" data-newtab="pack">📦 ${esc(tr("Modpack"))}</button></div>`;
 }
 
 // ---------- modpacks ----------
@@ -609,12 +609,14 @@ function renderInstalled(body, t, items, foreign) {
       <div class="grow">
         <div class="row-title">${it.source ? `<button class="title-link" data-idet="${esc(it.key)}" title="Details anzeigen">${esc(it.name)}</button>` : esc(it.name)}
           ${it.disabled ? `<span class="pill">deaktiviert</span>` : ""}
+          ${it.pinned ? `<button class="pill pin-pill" data-unpin="${esc(it.key)}" title="${esc(tr("Festgehalten – Updates überspringen diese Version. Klicken zum Lösen."))}">📌 ${esc(tr("festgehalten"))}</button>` : ""}
           ${!it.explicit ? `<span class="pill pill-blue" title="Automatisch als Voraussetzung installiert">Abhängigkeit</span>` : ""}
           <span class="pill">${esc(SOURCES[it.source])}</span></div>
         <div class="row-meta"><span class="mono">${esc(it.versionNumber)}</span> · ${esc(it.fileName)}
           ${nb.length ? ` · benötigt von ${esc(nb.join(", "))}` : ""}${deps.length ? ` · braucht ${esc(deps.join(", "))}` : ""}</div>
       </div>
       <div class="row-actions">
+        ${it.source ? `<button class="btn btn-sm btn-ghost" data-iver="${esc(it.key)}" title="${esc(tr("Andere (z. B. ältere) Version installieren"))}">${esc(tr("Version"))}</button>` : ""}
         ${it.pageUrl ? `<a class="btn btn-sm btn-ghost" href="${esc(it.pageUrl)}" data-ext>Seite</a>` : ""}
         <button class="btn btn-sm btn-danger" data-remove="${esc(it.key)}">Entfernen</button>
       </div></div>`;
@@ -636,6 +638,12 @@ function renderInstalled(body, t, items, foreign) {
       <div class="muted" style="font-size:12.5px;margin-top:6px">Erkannte Dateien werden danach wie eigene Installationen verwaltet: mit Updates und Abhängigkeitsprüfung.</div>` : ""}`;
   $$("[data-remove]", body).forEach(b => b.onclick = () => removeFlow(t, byKey[b.dataset.remove]));
   $$("[data-idet]", body).forEach(b => b.onclick = () => { const it = byKey[b.dataset.idet]; detailsModal(it.source, it.projectId, it.name, { installedVersion: it.versionId }); });
+  $$("[data-iver]", body).forEach(b => b.onclick = () => changeVersion(t, byKey[b.dataset.iver]));
+  $$("[data-unpin]", body).forEach(b => b.onclick = () => confirmModal(tr("Nicht mehr festhalten?"), `<p>${esc(tr("„{0}“ wird bei „Alle aktualisieren“ und in der Update-Übersicht wieder berücksichtigt.", byKey[b.dataset.unpin].name))}</p>`, tr("Lösen"), async () => {
+    await api("/api/pin", { type: t.type, id: t.id, key: b.dataset.unpin, pinned: false });
+    await refreshState();
+    renderTarget($("#main"), t.type, t.id, "installed");
+  }));
   $$("[data-tkey]", body).forEach(b => b.onchange = () => toggleFlow(t, { key: b.dataset.tkey, name: byKey[b.dataset.tkey].name }, b.checked, b));
   $$("[data-tfile]", body).forEach(b => b.onchange = () => toggleFlow(t, { file: b.dataset.tfile, name: b.dataset.tfile }, b.checked, b));
   $$("[data-foreign]", body).forEach(b => b.onclick = () => confirmModal("Datei löschen?", `„${esc(b.dataset.foreign)}“ wird aus dem Ordner gelöscht.`, "Löschen", async () => {
@@ -918,7 +926,7 @@ async function renderCrash(body, inst) {
     const [src, pid] = (m.key || "").split(":");
     return `<div class="crash-mod"><b>${esc(m.name)}</b>${m.disabled ? ` <span class="pill">deaktiviert</span>` : ""}${m.hits ? ` <span class="muted">(${m.hits}× im Fehlerverlauf)</span>` : ""}
       <span class="spacer"></span>
-      ${m.key ? `<button class="btn btn-sm" data-cupd="${esc(src)}:${esc(pid)}">↻ Aktualisieren</button><button class="btn btn-sm btn-ghost" data-cdet="${esc(src)}:${esc(pid)}" data-cname="${esc(m.name)}">Details</button>` : ""}
+      ${m.key ? `<button class="btn btn-sm" data-cupd="${esc(src)}:${esc(pid)}">↻ Aktualisieren</button><button class="btn btn-sm" data-cold="${esc(m.key)}">⬇ ${esc(tr("Ältere Version"))}</button><button class="btn btn-sm btn-ghost" data-cdet="${esc(src)}:${esc(pid)}" data-cname="${esc(m.name)}">Details</button>` : ""}
       ${(m.key || m.file) && !m.disabled ? `<button class="btn btn-sm btn-danger" data-coff="${esc(m.key || "")}" data-cfile="${esc(m.file || "")}" data-cname="${esc(m.name)}">Deaktivieren</button>` : ""}</div>`;
   };
   body.innerHTML = `
@@ -946,6 +954,13 @@ async function renderCrash(body, inst) {
   $$("[data-cupd]", body).forEach(b => b.onclick = () => {
     const [source, projectId] = b.dataset.cupd.split(":");
     makePlan({ type: "instance", id: inst.id }, [{ source, projectId }]);
+  });
+  $$("[data-cold]", body).forEach(b => b.onclick = async () => {
+    try {
+      const d = await api(`/api/target?type=instance&id=${encodeURIComponent(inst.id)}`);
+      const it = (d.items || []).find(x => x.key === b.dataset.cold);
+      if (it) changeVersion(d.target, it);
+    } catch (e) { toast(e.message, true); }
   });
   $$("[data-cdet]", body).forEach(b => b.onclick = () => { const [source, pid] = b.dataset.cdet.split(":"); detailsModal(source, pid, b.dataset.cname, {}); });
   $$("[data-coff]", body).forEach(b => b.onclick = async () => {
@@ -1177,18 +1192,31 @@ function bindResults(grid, t, hits) {
   });
 }
 
+// changeVersion lets the user pick another (e.g. older) version of an installed item.
+function changeVersion(t, it) {
+  versionPicker(t, { source: it.source, id: it.projectId, name: it.name, installedVersion: it.versionId }, async v => {
+    if (!v) {
+      // back to the newest version: release the pin, then update normally
+      if (it.pinned) await api("/api/pin", { type: t.type, id: t.id, key: it.key, pinned: false }).catch(() => {});
+      makePlan({ type: t.type, id: t.id }, [{ source: it.source, projectId: it.projectId }]);
+      return;
+    }
+    makePlan({ type: t.type, id: t.id }, [{ source: it.source, projectId: it.projectId, versionId: v.id, pin: true }]);
+  });
+}
+
 async function versionPicker(t, h, onPick) {
-  const md = modal(`<div class="modal-head"><div style="flex:1"><h2>Version von ${esc(h.name)}</h2><div class="sub">Nur Versionen, die zu dieser ${t.kind === "plugin" ? "Server-Software" : "Instanz"} passen.</div></div></div>
+  const md = modal(`<div class="modal-head"><div style="flex:1"><h2>${esc(tr("Version von {0}", h.name))}</h2><div class="sub">${esc(t.kind === "plugin" ? tr("Nur Versionen, die zu dieser Server-Software passen.") : tr("Nur Versionen, die zu dieser Instanz passen."))}${h.installedVersion ? " " + esc(tr("Wählst du eine ältere Version, wird sie festgehalten, damit Updates sie nicht ersetzen.")) : ""}</div></div></div>
     <div class="modal-body" id="vpBody">${loading()}</div>
-    <div class="modal-foot"><button class="btn btn-ghost" data-close>Abbrechen</button></div>`);
+    <div class="modal-foot"><button class="btn btn-ghost" data-close>${esc(tr("Abbrechen"))}</button></div>`);
   try {
     const list = await api(`/api/versions?source=${h.source}&type=${t.type}&id=${encodeURIComponent(t.id)}&project=${encodeURIComponent(h.id)}`);
-    if (!list || !list.length) { $("#vpBody", md).innerHTML = `<div class="empty">Keine passende Version gefunden.</div>`; return; }
+    if (!list || !list.length) { $("#vpBody", md).innerHTML = `<div class="empty">${esc(tr("Keine passende Version gefunden."))}</div>`; return; }
     $("#vpBody", md).innerHTML = `<div class="list card">
-      <div class="row" style="cursor:pointer" data-v=""><div class="grow"><div class="row-title">Automatisch (neueste stabile)</div><div class="row-meta">empfohlen</div></div></div>
+      <div class="row" style="cursor:pointer" data-v=""><div class="grow"><div class="row-title">${esc(h.installedVersion ? tr("Neueste stabile Version (nicht festhalten)") : tr("Automatisch (neueste stabile)"))}</div><div class="row-meta">${esc(tr("empfohlen"))}</div></div></div>
       ${list.map((v, i) => `<div class="row" style="cursor:pointer" data-v="${i}"><div class="grow">
-        <div class="row-title"><span class="mono">${esc(v.number)}</span>${v.type !== "release" ? `<span class="pill pill-gold">${esc(v.type)}</span>` : ""}</div>
-        <div class="row-meta">${fmtDate(v.date)} · ${esc((v.gameVersions || []).slice(0, 6).join(", "))}${(v.deps || []).filter(d => d.kind === "required").length ? " · " + v.deps.filter(d => d.kind === "required").length + " Voraussetzung(en)" : ""}</div>
+        <div class="row-title"><span class="mono">${esc(v.number)}</span>${v.type !== "release" ? `<span class="pill pill-gold">${esc(v.type)}</span>` : ""}${h.installedVersion === v.id ? `<span class="pill pill-green">${esc(tr("installiert"))}</span>` : ""}</div>
+        <div class="row-meta">${fmtDate(v.date)} · ${esc((v.gameVersions || []).slice(0, 6).join(", "))}${(v.deps || []).filter(d => d.kind === "required").length ? " · " + esc(tr("{0} Voraussetzung(en)", v.deps.filter(d => d.kind === "required").length)) : ""}</div>
       </div></div>`).join("")}</div>`;
     $$("[data-v]", md).forEach(r => r.onclick = () => { onPick(r.dataset.v === "" ? null : list[+r.dataset.v]); closeModal(md); });
   } catch (e) { $("#vpBody", md).innerHTML = `<div class="banner banner-err"><span class="b-ico">✕</span><div>${esc(e.message)}</div></div>`; }
@@ -1233,7 +1261,8 @@ function planModal(plan, target, requests, updateAll) {
 
   const row = i => `<div class="row plan-row">${iconHTML(i.iconUrl, i.name)}
     <div class="grow"><div class="row-title">${esc(i.name)}
-      ${i.action === "update" ? `<span class="pill pill-gold">Update</span>` : ""}
+      ${i.action === "update" ? (i.downgrade ? `<span class="pill pill-blue">⬇ ${esc(tr("Ältere Version"))}</span>` : `<span class="pill pill-gold">${esc(tr("Update"))}</span>`) : ""}
+      ${i.pin ? `<span class="pill" title="${esc(tr("Wird von Updates nicht ersetzt"))}">📌 ${esc(tr("festgehalten"))}</span>` : ""}
       ${i.version?.type && i.version.type !== "release" ? `<span class="pill pill-gold">${esc(i.version.type)}</span>` : ""}</div>
       <div class="row-meta">${i.action === "update" ? `<span class="mono">${esc(i.fromVersion)}</span> → ` : ""}<span class="mono">${esc(i.version?.number || "")}</span>
       ${!i.explicit && (i.requiredBy || []).length ? ` · benötigt von <b>${esc(i.requiredBy.join(", "))}</b>` : ""}${i.note ? " · " + esc(i.note) : ""}</div></div>

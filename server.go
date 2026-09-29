@@ -512,6 +512,22 @@ func registerRoutes(mux *http.ServeMux) {
 		}
 		return map[string]bool{"ok": true}, setEnabled(t, req.Key, req.File, req.Enabled)
 	}))
+	mux.HandleFunc("/api/pin", api(func(r *http.Request) (any, error) {
+		var req struct {
+			Type   string `json:"type"`
+			ID     string `json:"id"`
+			Key    string `json:"key"`
+			Pinned bool   `json:"pinned"`
+		}
+		if err := readBody(r, &req); err != nil {
+			return nil, err
+		}
+		t, err := loadTarget(req.Type, req.ID)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]bool{"ok": true}, setPinned(t, req.Key, req.Pinned)
+	}))
 	mux.HandleFunc("/api/remove-foreign", api(func(r *http.Request) (any, error) {
 		var req struct {
 			Type string `json:"type"`

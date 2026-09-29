@@ -57,6 +57,9 @@ func checkTargetUpdates(t *Target) *UpdateStatus {
 		hashOf := map[string]*InstalledItem{}
 		var hashes []string
 		for _, it := range mrItems {
+			if it.Pinned {
+				continue
+			}
 			h, _, err := fileSHA1(filepath.Join(t.Dir, it.DiskName()))
 			if err != nil {
 				continue

@@ -98,6 +98,9 @@ func (mockTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	case strings.Contains(u, "api.modrinth.com/v2/project/") && strings.Contains(u, "/version"):
 		id := strings.Split(strings.Split(u, "/project/")[1], "/")[0]
 		body = "[" + mrVersions[id] + "]"
+		if id == "AANobbMI" {
+			body = "[" + mrVersions[id] + "," + mrVersionJSON("AANobbMI", "sod0", "0.5.11+mc1.21.1", "2024-06-01T00:00:00Z", `{"project_id":"P7dR8mSH","dependency_type":"required"}`) + "]"
+		}
 	case strings.Contains(u, "api.modrinth.com/v2/project/"):
 		id := strings.Split(strings.Split(u, "/project/")[1], "?")[0]
 		for pid, pp := range mrProjects { // lookup by slug
@@ -128,6 +131,9 @@ func (mockTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 			if strings.Contains(v, `"id":"`+vid+`"`) {
 				body = v
 			}
+		}
+		if vid == "sod0" {
+			body = mrVersionJSON("AANobbMI", "sod0", "0.5.11+mc1.21.1", "2024-06-01T00:00:00Z", `{"project_id":"P7dR8mSH","dependency_type":"required"}`)
 		}
 	case strings.Contains(u, "cdn.modrinth.com"):
 		parts := strings.Split(r.URL.Path, "/")

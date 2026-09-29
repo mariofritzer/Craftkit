@@ -105,6 +105,7 @@ type PlanRequest struct {
 	ProjectID string `json:"projectId"`
 	VersionID string `json:"versionId,omitempty"`
 	Optional  bool   `json:"optional,omitempty"` // skip quietly if there is no compatible version (mod sets)
+	Pin       bool   `json:"pin,omitempty"`      // keep this exact version (downgrade)
 }
 
 type PlanItem struct {
@@ -118,6 +119,8 @@ type PlanItem struct {
 	Version      *ModVersion `json:"version"`
 	Action       string      `json:"action"` // install, update, keep
 	Explicit     bool        `json:"explicit"`
+	Pin          bool        `json:"pin,omitempty"`
+	Downgrade    bool        `json:"downgrade,omitempty"`
 	RequiredBy   []string    `json:"requiredBy"`
 	Dependencies []string    `json:"dependencies"`
 	Incompatible []string    `json:"incompatible,omitempty"`
@@ -219,6 +222,7 @@ type queued struct {
 	explicit                     bool
 	requiredBy                   string
 	optional                     bool
+	pin                          bool
 }
 
 // resolve builds an installation plan including all required dependencies.
@@ -240,7 +244,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 
 	var queue []queued
 	for _, rq := range reqs {
-		queue = append(queue, queued{rq.Source, rq.ProjectID, rq.VersionID, true, "", rq.Optional})
+		queue = append(queue, queued{rq.Source, rq.ProjectID, rq.VersionID, true, "", rq.Optional, rq.Pin})
 	}
 
 	for len(queue) > 0 {
@@ -400,18 +404,26 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 		}
 		item.Manual = v.File.URL == ""
 
+		item.Pin = q.pin
 		switch {
 		case installed == nil:
 			item.Action = "install"
 		case installed.VersionID == v.ID:
 			item.Action = "keep"
 			item.Note = "bereits aktuell"
+			if q.pin && !installed.Pinned {
+				item.Note = "wird festgehalten"
+			}
+		case q.versionID == "" && installed.Pinned && installedCompatible:
+			item.Action = "keep"
+			item.Note = "festgehalten auf " + installed.VersionNumber
 		case q.versionID == "" && installedCompatible && installed.InstalledVersionDate() != "" && v.Date <= installed.InstalledVersionDate():
 			item.Action = "keep"
 			item.Note = "bereits aktuell"
 		default:
 			item.Action = "update"
 			item.FromVersion = installed.VersionNumber
+			item.Downgrade = installed.VersionDate != "" && v.Date != "" && v.Date < installed.VersionDate
 			if !installedCompatible {
 				item.Note = "installierte Version passt nicht zu " + t.MCVersion
 			}
@@ -427,7 +439,7 @@ func (r *resolver) resolve(t *Target, reqs []PlanRequest) *Plan {
 				if d.ProjectID != "" {
 					item.Dependencies = append(item.Dependencies, dk)
 				}
-				queue = append(queue, queued{q.source, d.ProjectID, d.VersionID, false, proj.Name, false})
+				queue = append(queue, queued{q.source, d.ProjectID, d.VersionID, false, proj.Name, false, false})
 			case "optional":
 				if d.ProjectID == "" || optSeen[dk] || t.Items[dk] != nil {
 					continue
@@ -549,6 +561,9 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 			if ex := t.Items[it.Key]; ex != nil && it.Explicit && !ex.Explicit {
 				ex.Explicit = true
 			}
+			if ex := t.Items[it.Key]; ex != nil && it.Pin {
+				ex.Pinned = true
+			}
 			continue
 		}
 		if it.Manual {
@@ -605,6 +620,7 @@ func applyPlan(j *Job, plan *Plan) (*ApplyResult, error) {
 			Key: it.Key, Source: it.Source, ProjectID: it.ProjectID, Slug: it.Slug, Name: it.Name,
 			IconURL: it.IconURL, PageURL: it.PageURL, VersionID: it.Version.ID, VersionNumber: it.Version.Number,
 			VersionDate: it.Version.Date, FileName: name, Disabled: disabled, Explicit: explicit, Dependencies: it.Dependencies,
+			Pinned:       it.Pin || (prev != nil && prev.Pinned && it.Action != "update"),
 			Incompatible: it.Incompatible,
 			InstalledAt:  time.Now().Format(time.RFC3339),
 		}
@@ -770,4 +786,20 @@ func changeLabel(nInst, nUpd, nRem int, inst, upd, rem []string) string {
 		return "Änderung"
 	}
 	return strings.Join(parts, "; ")
+}
+
+// setPinned holds an installed item at its version (or releases it).
+func setPinned(t *Target, key string, pinned bool) error {
+	instMu.Lock()
+	defer instMu.Unlock()
+	it := t.Items[key]
+	if it == nil {
+		return fmt.Errorf("nicht installiert")
+	}
+	it.Pinned = pinned
+	if err := t.save(); err != nil {
+		return err
+	}
+	recheckLater(t)
+	return nil
 }

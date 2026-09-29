@@ -29,8 +29,9 @@ type InstalledItem struct {
 	VersionDate   string   `json:"versionDate,omitempty"`
 	FileName      string   `json:"fileName"` // name of the jar (without ".disabled")
 	Disabled      bool     `json:"disabled,omitempty"`
-	Explicit      bool     `json:"explicit"`     // chosen by the user (not only pulled in as dependency)
-	Dependencies  []string `json:"dependencies"` // keys of required items
+	Pinned        bool     `json:"pinned,omitempty"` // held at this version (downgrade), skipped by updates
+	Explicit      bool     `json:"explicit"`         // chosen by the user (not only pulled in as dependency)
+	Dependencies  []string `json:"dependencies"`     // keys of required items
 	Incompatible  []string `json:"incompatible,omitempty"`
 	InstalledAt   string   `json:"installedAt"`
 }
