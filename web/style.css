@@ -336,3 +336,38 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .set-card b { display: block; }
 .set-card .muted { display: block; font-size: 12.5px; margin-top: 2px; }
 .set-ico { font-size: 22px; line-height: 1; }
+
+.title-link { background: none; border: none; padding: 0; margin: 0; font: inherit; font-weight: 600; color: inherit; cursor: pointer; text-align: left; }
+.title-link:hover { color: var(--green); text-decoration: underline; }
+.modal-details { width: min(900px, 100%); height: min(760px, calc(100vh - 48px)); }
+.det-icon { width: 56px; height: 56px; }
+.det-body { flex: 1; padding-top: 14px; }
+.rich { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.rich img { max-width: 100%; height: auto; border-radius: 6px; }
+.rich h1, .rich h2, .rich h3 { font-size: 17px; margin: 18px 0 8px; }
+.rich h4, .rich h5, .rich h6 { font-size: 15px; margin: 14px 0 6px; }
+.rich p { margin: 0 0 10px; }
+.rich ul, .rich ol { padding-left: 22px; margin: 0 0 10px; }
+.rich code { font-family: var(--mono); font-size: 12.5px; background: var(--bg-2); padding: 1px 5px; border-radius: 4px; }
+.rich pre { background: var(--bg-2); padding: 10px; border-radius: 8px; overflow: auto; }
+.rich pre code { background: none; padding: 0; }
+.rich blockquote { border-left: 3px solid var(--line-2); margin: 0 0 10px; padding: 2px 12px; color: var(--muted); }
+.rich table { border-collapse: collapse; margin-bottom: 10px; }
+.rich td, .rich th { border: 1px solid var(--line); padding: 4px 8px; }
+.rich hr { border: none; border-top: 1px solid var(--line); margin: 14px 0; }
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.gallery a { display: block; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--bg-2); color: var(--muted); font-size: 12.5px; text-decoration: none; }
+.gallery img { width: 100%; aspect-ratio: 16/9; object-fit: cover; display: block; }
+.gallery span { display: block; padding: 6px 8px; }
+details.ver { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; background: var(--bg-2); }
+details.ver summary { padding: 8px 12px; cursor: pointer; }
+.ver-log { padding: 4px 14px 10px; font-size: 13px; }
+.crash-finding { margin-bottom: 10px; }
+.cf-head { display: flex; gap: 12px; padding: 12px 14px; align-items: flex-start; }
+.cf-ico { font-size: 20px; line-height: 1.2; }
+.cf-body { padding: 0 14px 12px 46px; }
+.crash-mod { display: flex; gap: 8px; align-items: center; padding: 5px 0; flex-wrap: wrap; }
+.crash-mod .spacer { flex: 1; }
+.kind-missing, .kind-incompatible { border-left: 3px solid var(--red); }
+.kind-suspect, .kind-mixin { border-left: 3px solid var(--gold); }
+.kind-memory, .kind-java { border-left: 3px solid var(--blue); }

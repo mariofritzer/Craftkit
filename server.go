@@ -735,6 +735,24 @@ func registerRoutes(mux *http.ServeMux) {
 		return out, nil
 	}))
 
+	// ---------- details / crash help ----------
+	mux.HandleFunc("/api/details", api(func(r *http.Request) (any, error) {
+		q := r.URL.Query()
+		return projectDetails(q.Get("source"), q.Get("project"))
+	}))
+	mux.HandleFunc("/api/changelog", api(func(r *http.Request) (any, error) {
+		q := r.URL.Query()
+		txt, err := cfChangelog(q.Get("project"), q.Get("version"))
+		return map[string]string{"changelog": txt}, err
+	}))
+	mux.HandleFunc("/api/crash", api(func(r *http.Request) (any, error) {
+		in, err := loadInstance(r.URL.Query().Get("id"))
+		if err != nil {
+			return nil, err
+		}
+		return analyzeCrash(in), nil
+	}))
+
 	// ---------- mod sets ----------
 	mux.HandleFunc("/api/sets", api(func(r *http.Request) (any, error) {
 		return modSets, nil

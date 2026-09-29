@@ -110,7 +110,8 @@ func (mockTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 			status, body = 404, `{"error":"not_found"}`
 			break
 		}
-		body = fmt.Sprintf(`{"id":%q,"slug":%q,"title":%q,"description":%q,"icon_url":"","downloads":5,"project_type":"mod","loaders":["fabric"]}`, id, p[0], p[1], p[2])
+		md := "# " + p[1] + "\\n\\n**Fett** und *kursiv* mit [Link](https://modrinth.com).\\n\\n- Punkt eins\\n- Punkt zwei\\n\\n<img src=x onerror=alert(1)><script>alert(2)</script><a href=\\\"javascript:alert(3)\\\">böser Link</a>\\n\\n```\\ncode\\n```"
+		body = fmt.Sprintf(`{"id":%q,"slug":%q,"title":%q,"description":%q,"icon_url":"","downloads":5,"project_type":"mod","loaders":["fabric"],"body":"%s","client_side":"required","server_side":"optional","license":{"id":"MIT"},"gallery":[{"url":"https://cdn.modrinth.com/x.png","title":"Screenshot"}]}`, id, p[0], p[1], p[2], md)
 	case strings.Contains(u, "api.modrinth.com/v2/version_files"):
 		// the test profile contains a jar whose sha1 is that of jar("sod1")
 		h := sha1.Sum(jar("sod1"))

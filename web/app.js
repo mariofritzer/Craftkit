@@ -372,12 +372,13 @@ async function searchPacks(q, offset) {
   const grid = $("#packGrid");
   hits.forEach(h => {
     grid.insertAdjacentHTML("beforeend", `<div class="result" data-pack="${esc(h.id)}">${iconHTML(h.iconUrl, h.name)}<div class="grow">
-      <div class="result-title">${esc(h.name)}</div><div class="result-sum">${esc(h.summary)}</div>
+      <button class="result-title title-link" data-pdet>${esc(h.name)}</button><div class="result-sum">${esc(h.summary)}</div>
       <div class="result-foot"><span>⬇ ${fmtNum(h.downloads)}</span>${h.author ? `<span>· ${esc(h.author)}</span>` : ""}<span class="spacer"></span>
         <button class="linkish" data-pver>Version</button>${h.pageUrl ? `<a class="linkish" href="${esc(h.pageUrl)}" data-ext>Seite</a>` : ""}
         <button class="btn btn-sm btn-primary" data-pinst>Installieren</button></div></div></div>`);
     const card = grid.lastElementChild;
     $("[data-pinst]", card).onclick = () => installPack(h, "", "");
+    $("[data-pdet]", card).onclick = () => detailsModal(h.source, h.id, h.name, {});
     $("[data-pver]", card).onclick = () => packVersionPicker(h);
   });
   const shown = $$(".result", grid).length;
@@ -517,7 +518,8 @@ async function renderTarget(m, type, id, tab) {
       <button class="tab ${S.view.tab === "add" ? "active" : ""}" data-tab="add">+ ${noun} hinzufügen</button>
       ${inst ? `<button class="tab ${S.view.tab.startsWith("rp") ? "active" : ""}" data-tab="rp">🎨 Ressourcenpakete</button>
         <button class="tab ${S.view.tab.startsWith("shader") ? "active" : ""}" data-tab="shader">✨ Shader</button>
-        <button class="tab ${S.view.tab === "worlds" ? "active" : ""}" data-tab="worlds">🌍 Welten</button>` : ""}
+        <button class="tab ${S.view.tab === "worlds" ? "active" : ""}" data-tab="worlds">🌍 Welten</button>
+        <button class="tab ${S.view.tab === "crash" ? "active" : ""}" data-tab="crash">🩺 Absturzhilfe</button>` : ""}
     </div>
     <div id="tabBody"></div></div>`;
 
@@ -534,6 +536,7 @@ async function renderTarget(m, type, id, tab) {
   const body = $("#tabBody");
   if (S.view.tab === "installed") renderInstalled(body, t, items, data.foreignInfo || []);
   else if (S.view.tab === "worlds" && inst) renderWorlds(body, inst);
+  else if (S.view.tab === "crash" && inst) renderCrash(body, inst);
   else if (inst && /^(rp|shader)(-add)?$/.test(S.view.tab)) renderPacks(body, inst, S.view.tab);
   else renderSearch(body, t);
 }
@@ -569,7 +572,7 @@ function renderInstalled(body, t, items, foreign) {
       ${toggleHTML(!it.disabled, `data-tkey="${esc(it.key)}"`)}
       ${iconHTML(it.iconUrl, it.name)}
       <div class="grow">
-        <div class="row-title">${esc(it.name)}
+        <div class="row-title">${it.source ? `<button class="title-link" data-idet="${esc(it.key)}" title="Details anzeigen">${esc(it.name)}</button>` : esc(it.name)}
           ${it.disabled ? `<span class="pill">deaktiviert</span>` : ""}
           ${!it.explicit ? `<span class="pill pill-blue" title="Automatisch als Voraussetzung installiert">Abhängigkeit</span>` : ""}
           <span class="pill">${esc(SOURCES[it.source])}</span></div>
@@ -597,6 +600,7 @@ function renderInstalled(body, t, items, foreign) {
         <button class="btn btn-sm btn-danger" data-foreign="${esc(f.file)}">Löschen</button></div>`).join("")}</div>
       <div class="muted" style="font-size:12.5px;margin-top:6px">Erkannte Dateien werden danach wie eigene Installationen verwaltet: mit Updates und Abhängigkeitsprüfung.</div>` : ""}`;
   $$("[data-remove]", body).forEach(b => b.onclick = () => removeFlow(t, byKey[b.dataset.remove]));
+  $$("[data-idet]", body).forEach(b => b.onclick = () => { const it = byKey[b.dataset.idet]; detailsModal(it.source, it.projectId, it.name, { installedVersion: it.versionId }); });
   $$("[data-tkey]", body).forEach(b => b.onchange = () => toggleFlow(t, { key: b.dataset.tkey, name: byKey[b.dataset.tkey].name }, b.checked, b));
   $$("[data-tfile]", body).forEach(b => b.onchange = () => toggleFlow(t, { file: b.dataset.tfile, name: b.dataset.tfile }, b.checked, b));
   $$("[data-foreign]", body).forEach(b => b.onclick = () => confirmModal("Datei löschen?", `„${esc(b.dataset.foreign)}“ wird aus dem Ordner gelöscht.`, "Löschen", async () => {
@@ -720,6 +724,202 @@ async function renderPacks(body, inst, tab) {
     await api("/api/remove-foreign", { type: t.type, id: t.id, file: b.dataset.pdel });
     renderTarget($("#main"), "instance", inst.id, kind);
   }));
+}
+
+// ---------- details view ----------
+const SAFE_TAGS = new Set(["P", "BR", "B", "STRONG", "I", "EM", "U", "S", "DEL", "UL", "OL", "LI", "H1", "H2", "H3", "H4", "H5", "H6", "A", "IMG",
+  "CODE", "PRE", "BLOCKQUOTE", "HR", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD", "DIV", "SPAN", "DETAILS", "SUMMARY", "SUP", "SUB", "CENTER", "FIGURE", "FIGCAPTION"]);
+
+// sanitize keeps only harmless markup from untrusted descriptions.
+function sanitize(html) {
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const walk = node => {
+    for (const el of [...node.children]) {
+      if (!SAFE_TAGS.has(el.tagName)) {
+        if (["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "FORM", "INPUT", "BUTTON", "TEXTAREA", "SELECT", "LINK", "META"].includes(el.tagName)) { el.remove(); continue; }
+        el.replaceWith(...el.childNodes);
+        continue;
+      }
+      for (const a of [...el.attributes]) {
+        const n = a.name.toLowerCase();
+        const keep = (el.tagName === "A" && n === "href") || (el.tagName === "IMG" && ["src", "alt", "width", "height"].includes(n)) ||
+          ((el.tagName === "TD" || el.tagName === "TH") && ["colspan", "rowspan"].includes(n));
+        if (!keep) el.removeAttribute(a.name);
+      }
+      if (el.tagName === "A") {
+        const h = el.getAttribute("href") || "";
+        if (/^https:\/\//i.test(h)) el.setAttribute("data-ext", ""); else el.removeAttribute("href");
+      }
+      if (el.tagName === "IMG") {
+        const src = el.getAttribute("src") || "";
+        if (!/^https:\/\//i.test(src)) { el.remove(); continue; }
+        el.setAttribute("loading", "lazy");
+        el.setAttribute("referrerpolicy", "no-referrer");
+      }
+      if (el.tagName === "CENTER") el.setAttribute("style", "text-align:center");
+      walk(el);
+    }
+  };
+  walk(doc.body.firstChild);
+  return doc.body.firstChild.innerHTML;
+}
+
+// markdown turns the common parts of Markdown into HTML (the result is sanitized afterwards).
+function markdown(md) {
+  const lines = (md || "").replace(/\r/g, "").split("\n");
+  const out = [];
+  let list = null, para = [], inCode = false, code = [];
+  const inline = t => t
+    .replace(/!\[([^\]]*)\]\(([^)\s]+)[^)]*\)/g, '<img alt="$1" src="$2">')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)[^)]*\)/g, '<a href="$2">$1</a>')
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/__([^_]+)__/g, "<b>$1</b>")
+    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>")
+    .replace(/(https:\/\/[^\s<"')]+)(?![^<]*>|[^<]*<\/a>)/g, '<a href="$1">$1</a>');
+  const flushPara = () => { if (para.length) { out.push("<p>" + inline(para.join(" ")) + "</p>"); para = []; } };
+  const flushList = () => { if (list) { out.push(`<${list.tag}>${list.items.map(i => "<li>" + inline(i) + "</li>").join("")}</${list.tag}>`); list = null; } };
+  for (const raw of lines) {
+    const l = raw.trimEnd();
+    if (/^```/.test(l.trim())) {
+      if (inCode) { out.push("<pre><code>" + esc(code.join("\n")) + "</code></pre>"); code = []; inCode = false; }
+      else { flushPara(); flushList(); inCode = true; }
+      continue;
+    }
+    if (inCode) { code.push(raw); continue; }
+    let m;
+    if (!l.trim()) { flushPara(); flushList(); continue; }
+    if ((m = l.match(/^(#{1,6})\s+(.*)$/))) { flushPara(); flushList(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); continue; }
+    if (/^(\*\*\*|---|___)\s*$/.test(l.trim())) { flushPara(); flushList(); out.push("<hr>"); continue; }
+    if ((m = l.match(/^\s*[-*+]\s+(.*)$/))) { flushPara(); if (!list || list.tag !== "ul") { flushList(); list = { tag: "ul", items: [] }; } list.items.push(m[1]); continue; }
+    if ((m = l.match(/^\s*\d+[.)]\s+(.*)$/))) { flushPara(); if (!list || list.tag !== "ol") { flushList(); list = { tag: "ol", items: [] }; } list.items.push(m[1]); continue; }
+    if ((m = l.match(/^>\s?(.*)$/))) { flushPara(); flushList(); out.push("<blockquote>" + inline(m[1]) + "</blockquote>"); continue; }
+    if (/^\s*</.test(l)) { flushPara(); flushList(); out.push(l); continue; } // raw HTML line
+    para.push(l.trim());
+  }
+  if (inCode) out.push("<pre><code>" + esc(code.join("\n")) + "</code></pre>");
+  flushPara(); flushList();
+  return out.join("\n");
+}
+
+function renderRich(text, fmt) {
+  return sanitize(fmt === "html" ? (text || "") : markdown(text || ""));
+}
+
+async function detailsModal(source, id, name, opts = {}) {
+  const md = modal(`<div class="modal-head"><div style="flex:1"><h2>${esc(name)}</h2><div class="sub">Lade Details …</div></div></div>
+    <div class="modal-body">${loading()}</div>`, true);
+  md.querySelector(".modal").classList.add("modal-details");
+  let d;
+  try { d = await api(`/api/details?source=${source}&project=${encodeURIComponent(id)}`); }
+  catch (e) {
+    md.querySelector(".modal-body").innerHTML = `<div class="banner banner-err"><span class="b-ico">✕</span><div>${esc(e.message)}</div></div>`;
+    md.querySelector(".modal").insertAdjacentHTML("beforeend", `<div class="modal-foot"><button class="btn" data-close>Schließen</button></div>`);
+    bindClose(md);
+    return;
+  }
+  const linkNames = { issues: "Fehler melden", source: "Quellcode", wiki: "Wiki", discord: "Discord" };
+  const sideTxt = v => ({ required: "nötig", optional: "optional", unsupported: "nicht nötig" }[v] || "");
+  const gallery = d.gallery || [], versions = d.versions || [];
+  md.querySelector(".modal").innerHTML = `
+    <div class="modal-head">${iconHTML(d.iconUrl, d.name, "mod-icon det-icon")}
+      <div style="flex:1;min-width:0"><h2>${esc(d.name)}</h2><div class="sub">${esc(d.summary || "")}</div>
+        <div class="head-meta">
+          <span class="pill">${esc(SOURCES[d.source])}</span><span class="pill">⬇ ${fmtNum(d.downloads)}</span>
+          ${d.updated ? `<span class="pill">aktualisiert ${esc(timeAgo(d.updated))}</span>` : ""}
+          ${d.license ? `<span class="pill">Lizenz: ${esc(d.license)}</span>` : ""}
+          ${d.clientSide ? `<span class="pill" title="Wird auf dem Client (bei dir) gebraucht?">Client: ${esc(sideTxt(d.clientSide))}</span>` : ""}
+          ${d.serverSide ? `<span class="pill" title="Wird auf dem Server gebraucht?">Server: ${esc(sideTxt(d.serverSide))}</span>` : ""}
+        </div></div></div>
+    <div class="tabs" style="margin:0 20px 0"><button class="tab active" data-dt="desc">Beschreibung</button>
+      ${gallery.length ? `<button class="tab" data-dt="gal">Bilder (${gallery.length})</button>` : ""}
+      <button class="tab" data-dt="ver">Versionen</button></div>
+    <div class="modal-body det-body">
+      <div data-dp="desc" class="rich">${d.body ? renderRich(d.body, d.bodyFormat) : `<p class="muted">Keine Beschreibung vorhanden.</p>`}</div>
+      <div data-dp="gal" class="hidden"><div class="gallery">${gallery.map(g => `<a href="${esc(g.url)}" data-ext><img src="${esc(g.url)}" alt="${esc(g.title || "")}" loading="lazy" referrerpolicy="no-referrer">${g.title ? `<span>${esc(g.title)}</span>` : ""}</a>`).join("")}</div></div>
+      <div data-dp="ver" class="hidden">${versions.map((v, i) => `<details class="ver" ${i === 0 ? "open" : ""} data-vi="${i}">
+        <summary><span class="mono">${esc(v.number)}</span>${v.type !== "release" ? ` <span class="pill pill-gold">${esc(v.type)}</span>` : ""}${opts.installedVersion === v.id ? ` <span class="pill pill-green">installiert</span>` : ""}
+          <span class="muted"> · ${fmtDate(v.date)} · ${esc((v.gameVersions || []).slice(0, 5).join(", "))}${(v.loaders || []).length ? " · " + esc(v.loaders.join(", ")) : ""}</span></summary>
+        <div class="rich ver-log">${v.changelog ? renderRich(v.changelog, v.changelogFmt) : (v.changelogFmt === "html" ? `<span class="muted">Lade Änderungen …</span>` : `<span class="muted">Kein Änderungsprotokoll.</span>`)}</div></details>`).join("") || `<p class="muted">Keine Versionen gefunden.</p>`}</div>
+    </div>
+    <div class="modal-foot">${Object.entries(d.links || {}).map(([k, u]) => `<a class="btn btn-sm btn-ghost" href="${esc(u)}" data-ext>${esc(linkNames[k] || k)} ↗</a>`).join("")}
+      ${d.pageUrl ? `<a class="btn btn-sm btn-ghost" href="${esc(d.pageUrl)}" data-ext>Projektseite ↗</a>` : ""}<span class="spacer"></span>
+      <button class="btn btn-ghost" data-close>Schließen</button>
+      ${opts.toggle ? `<button class="btn btn-primary" id="detSel">${opts.selected() ? "✓ Ausgewählt" : "+ Auswählen"}</button>` : ""}</div>`;
+  bindClose(md);
+  $$("[data-dt]", md).forEach(b => b.onclick = () => {
+    $$("[data-dt]", md).forEach(x => x.classList.toggle("active", x === b));
+    $$("[data-dp]", md).forEach(p => p.classList.toggle("hidden", p.dataset.dp !== b.dataset.dt));
+  });
+  // CurseForge changelogs are loaded when a version is opened
+  $$("details.ver", md).forEach(det => det.addEventListener("toggle", async () => {
+    const v = versions[+det.dataset.vi];
+    if (!det.open || v.changelog || v.changelogFmt !== "html" || v._loading) return;
+    v._loading = true;
+    try {
+      const r = await api(`/api/changelog?project=${encodeURIComponent(d.id)}&version=${encodeURIComponent(v.id)}`);
+      v.changelog = r.changelog || "";
+      $(".ver-log", det).innerHTML = v.changelog ? renderRich(v.changelog, "html") : `<span class="muted">Kein Änderungsprotokoll.</span>`;
+    } catch (e) { $(".ver-log", det).innerHTML = `<span class="muted">${esc(e.message)}</span>`; }
+  }));
+  const first = $("details.ver[open]", md);
+  if (first) first.dispatchEvent(new Event("toggle"));
+  if ($("#detSel", md)) $("#detSel", md).onclick = () => { opts.toggle(); $("#detSel", md).textContent = opts.selected() ? "✓ Ausgewählt" : "+ Auswählen"; };
+}
+
+// ---------- crash help ----------
+async function renderCrash(body, inst) {
+  body.innerHTML = loading("Suche den letzten Absturz …");
+  let r;
+  try { r = await api("/api/crash?id=" + encodeURIComponent(inst.id)); }
+  catch (e) { body.innerHTML = `<div class="banner banner-err"><span class="b-ico">✕</span><div>${esc(e.message)}</div></div>`; return; }
+  if (!r.found) {
+    body.innerHTML = `<div class="card empty"><div class="big">🎉</div><b>Kein Absturz gefunden.</b><div style="margin-top:6px">Stürzt Minecraft ab, schau hier nach – CraftKit liest dann den Absturzbericht und sagt dir, woran es liegt.</div>
+      <div style="margin-top:14px"><button class="btn" id="crRe">Erneut prüfen</button></div></div>`;
+    $("#crRe").onclick = () => renderCrash(body, inst);
+    return;
+  }
+  const icons = { missing: "🧩", incompatible: "⚔", suspect: "🔎", memory: "🧠", java: "☕", mixin: "🧬", info: "ℹ" };
+  const modBtns = (m) => {
+    const [src, pid] = (m.key || "").split(":");
+    return `<div class="crash-mod"><b>${esc(m.name)}</b>${m.disabled ? ` <span class="pill">deaktiviert</span>` : ""}${m.hits ? ` <span class="muted">(${m.hits}× im Fehlerverlauf)</span>` : ""}
+      <span class="spacer"></span>
+      ${m.key ? `<button class="btn btn-sm" data-cupd="${esc(src)}:${esc(pid)}">↻ Aktualisieren</button><button class="btn btn-sm btn-ghost" data-cdet="${esc(src)}:${esc(pid)}" data-cname="${esc(m.name)}">Details</button>` : ""}
+      ${(m.key || m.file) && !m.disabled ? `<button class="btn btn-sm btn-danger" data-coff="${esc(m.key || "")}" data-cfile="${esc(m.file || "")}" data-cname="${esc(m.name)}">Deaktivieren</button>` : ""}</div>`;
+  };
+  body.innerHTML = `
+    <div class="card card-pad" style="margin-bottom:14px;display:flex;gap:14px;align-items:flex-start">
+      <div style="font-size:26px">💥</div>
+      <div style="flex:1;min-width:0"><b>Letzter Absturz: ${esc(timeAgo(r.time))}</b> <span class="muted">(${esc(fmtDateTime(r.time))})</span>
+        ${r.description ? `<div class="muted" style="margin-top:2px">${esc(r.description)}</div>` : ""}
+        <div class="mono muted" style="font-size:11.5px;margin-top:4px;word-break:break-all">${esc(r.file)}</div></div>
+      <button class="btn btn-sm" id="crOpen">Bericht öffnen</button><button class="btn btn-sm" id="crRe">Erneut prüfen</button></div>
+    ${r.findings.map((f, i) => `<div class="card crash-finding kind-${esc(f.kind)}">
+      <div class="cf-head"><span class="cf-ico">${icons[f.kind] || "•"}</span><div style="flex:1"><b>${esc(f.title)}</b>${f.detail ? `<div class="muted" style="margin-top:3px">${esc(f.detail)}</div>` : ""}</div></div>
+      ${(f.missing || []).length ? `<div class="cf-body">${f.missing.map(m => `<div class="crash-mod"><b>${esc(m.name || m.modId)}</b> <span class="muted">– benötigt von ${esc((m.neededBy || []).join(", "))}${m.projectId ? "" : " · nicht automatisch gefunden"}</span></div>`).join("")}
+        ${f.missing.some(m => m.projectId) ? `<button class="btn btn-sm btn-primary" data-cmiss="${i}" style="margin-top:8px">Fehlende installieren</button>` : ""}</div>` : ""}
+      ${(f.mods || []).length ? `<div class="cf-body">${f.mods.map(modBtns).join("")}</div>` : ""}
+      ${f.kind === "memory" ? `<div class="cf-body"><button class="btn btn-sm btn-primary" id="crRam">Arbeitsspeicher einstellen</button></div>` : ""}
+    </div>`).join("")}
+    ${r.excerpt ? `<details style="margin-top:12px"><summary class="muted" style="cursor:pointer">Auszug aus dem Bericht anzeigen</summary><pre class="log" style="height:auto;max-height:320px">${esc(r.excerpt)}</pre></details>` : ""}`;
+  $("#crOpen").onclick = () => api("/api/open-folder", { path: r.file });
+  $("#crRe").onclick = () => renderCrash(body, inst);
+  if ($("#crRam")) $("#crRam").onclick = () => instanceSettingsModal(inst);
+  $$("[data-cmiss]", body).forEach(b => b.onclick = () => {
+    const f = r.findings[+b.dataset.cmiss];
+    makePlan({ type: "instance", id: inst.id }, f.missing.filter(m => m.projectId).map(m => ({ source: m.source, projectId: m.projectId })));
+  });
+  $$("[data-cupd]", body).forEach(b => b.onclick = () => {
+    const [source, projectId] = b.dataset.cupd.split(":");
+    makePlan({ type: "instance", id: inst.id }, [{ source, projectId }]);
+  });
+  $$("[data-cdet]", body).forEach(b => b.onclick = () => { const [source, pid] = b.dataset.cdet.split(":"); detailsModal(source, pid, b.dataset.cname, {}); });
+  $$("[data-coff]", body).forEach(b => b.onclick = async () => {
+    try {
+      await api("/api/toggle", { type: "instance", id: inst.id, key: b.dataset.coff, file: b.dataset.coff ? "" : b.dataset.cfile, enabled: false });
+      toast(`„${b.dataset.cname}“ deaktiviert – starte Minecraft erneut.`);
+      renderCrash(body, inst);
+    } catch (e) { toast(e.message, true); }
+  });
 }
 
 // ---------- worlds ----------
@@ -903,7 +1103,7 @@ function resultCard(h) {
   return `<div class="result ${sel ? "selected" : ""}" data-rid="${esc(h.source + ":" + h.id)}">
     ${iconHTML(h.iconUrl, h.name)}
     <div class="grow">
-      <div class="result-title">${esc(h.name)}</div>
+      <button class="result-title title-link" data-det title="Details anzeigen">${esc(h.name)}</button>
       <div class="result-sum">${esc(h.summary)}</div>
       <div class="result-foot">
         <span>⬇ ${fmtNum(h.downloads)}</span>${h.author ? `<span>· ${esc(h.author)}</span>` : ""}
@@ -928,6 +1128,10 @@ function bindResults(grid, t, hits) {
       else S.cart.push({ source: h.source, projectId: h.id, name: h.name, iconUrl: h.iconUrl });
       refresh();
     };
+    $("[data-det]", card).onclick = () => detailsModal(h.source, h.id, h.name, {
+      selected: () => !!inCart(h.source, h.id),
+      toggle: () => document.querySelector(`[data-rid="${CSS.escape(h.source + ":" + h.id)}"] [data-add]`)?.click(),
+    });
     $("[data-ver]", card).onclick = () => versionPicker(t, h, v => {
       let c = inCart(h.source, h.id);
       if (!c) { c = { source: h.source, projectId: h.id, name: h.name, iconUrl: h.iconUrl }; S.cart.push(c); }

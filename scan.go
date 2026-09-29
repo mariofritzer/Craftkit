@@ -514,7 +514,14 @@ func missingDeps(jars []*JarInfo, kind string) []*MissingDep {
 }
 
 // suggestForMissing looks up Modrinth projects whose slug matches the missing id.
+// suggestHook replaces the online lookup in unit tests.
+var suggestHook func([]*MissingDep)
+
 func suggestForMissing(missing []*MissingDep) {
+	if suggestHook != nil {
+		suggestHook(missing)
+		return
+	}
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, 6)
 	for _, m := range missing {
